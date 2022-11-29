@@ -12,7 +12,7 @@ Outputs
 Steps
 [x] Convert pixel grid to obstacle map (join connected components)
 [x] Make voronoi diagram
-[ ] Identify boundary vertices
+[x] Identify boundary vertices
 [ ] Find closest points from src/dest to voronoi path (drop perpendicars to all edges and pick the shortest one)
 [ ] find next point (closest perpendicular point if src is not already there, o/w djikstra/bfs from src to destination)
 """
@@ -59,6 +59,10 @@ class Voronoi:
         for i in range(self.m):
             self.margin.append([(0, np.inf, np.inf)] * self.n) # (closestObstacleId, displacementX, displacementY)
         self.dilate_obstacles()
+
+        self.vertices = []
+        self.edges = []
+        self.generate_boundaries()
 
         return
 
@@ -112,6 +116,48 @@ class Voronoi:
 
         return
 
+    def get_neighbours(self, x, y):
+        """
+        returns neighbours of vertex at (x, y).
+        note: m*n grid has (m+1)*(n+1) vertices
+        """
+        touchesBoundary = x==0 or x==self.m or y==0 or y==self.n
+        neighbours = set()
+        if x>0 and y>0:
+            neighbours.add(self.margin[x-1][y-1][0])
+        if x<self.m and y>0:
+            neighbours.add(self.margin[x][y-1][0])
+        if x>0 and y<self.n:
+            neighbours.add(self.margin[x-1][y][0])
+        if x<self.m and y<self.n:
+            neighbours.add(self.margin[x][y][0])
+
+        isCornerVertex = len(neighbours) >= 2 if touchesBoundary else len(neighbours) >= 3
+        return isCornerVertex, neighbours
+
+    def generate_boundaries(self):
+        """
+        identify corner vertices and generate a graph of edges connecting them.
+        """
+        neighbouringRegions = [] # list of sets
+        for i in range(self.m + 1):
+            for j in range(self.n + 1):
+                isCornerVertex, regions = self.get_neighbours(i, j)
+                if isCornerVertex:
+                    self.vertices.append((i, j))
+                    self.edges.append([])
+                    neighbouringRegions.append(regions)
+
+        # add edge b/w vertices with >=2 common neighbours
+        numVertices = len(self.vertices)
+        for i in range(numVertices-1):
+            for j in range(i+1, numVertices):
+                intersection = neighbouringRegions[i].intersection(neighbouringRegions[j])
+                if len(intersection)>=2:
+                    self.edges[i].append(j)
+                    self.edges[j].append(i)
+        return
+
     def print_grid(self):
         print("===== grid =====")
         for i in range(self.m):
@@ -140,6 +186,12 @@ class Voronoi:
                 print(" " * (spaces - num_digits(self.margin[i][j][0])) + text, end="")
             print()
 
+    def print_boundary(self):
+        print("===== boundary =====")
+        print(f"i: (x, y) | self.edges[i]")
+        for i, (x, y) in enumerate(self.vertices):
+            print(f"{i}: ({x}, {y}) | {self.edges[i]}")
+
     def nextTarget(self, src, dest):
         """
         returns the next points to approach
@@ -163,14 +215,6 @@ class TestVoronoi(unittest.TestCase):
         # answer = (0, 1)
         # self.assertEqual(nextTarget, answer)
 
-    def test_random(self):
-        m,n = 10, 10
-        grid = generate.generate_random_grid(m, n, 30)
-        voronoi = Voronoi(grid)
-        voronoi.print_grid()
-        # voronoi.print_map()
-        voronoi.print_margin()
-
     def test_2(self):
         """
         test a specific input grid
@@ -191,6 +235,29 @@ class TestVoronoi(unittest.TestCase):
         voronoi.print_grid()
         # voronoi.print_map()
         voronoi.print_margin()
+        voronoi.print_boundary()
+
+    def test_3(self):
+        grid = np.array([
+            [0,1,0,0],
+            [0,0,0,0],
+            [0,0,0,1],
+            [1,0,0,0]
+        ])
+        voronoi = Voronoi(grid)
+        voronoi.print_grid()
+        voronoi.print_margin()
+        voronoi.print_boundary()
+
+    def test_random(self):
+        m,n = 20, 20
+        numOnes = 10
+        grid = generate.generate_random_grid(m, n, numOnes)
+        voronoi = Voronoi(grid)
+        voronoi.print_grid()
+        # voronoi.print_map()
+        voronoi.print_margin()
+        voronoi.print_boundary()
 
 if __name__ == '__main__':
     unittest.main()
