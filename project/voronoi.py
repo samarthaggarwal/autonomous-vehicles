@@ -12,9 +12,9 @@ Outputs
 Steps
 [x] Convert pixel grid to obstacle map (join connected components)
 [x] Make voronoi diagram
-[x] Identify boundary vertices
-[ ] Find closest points from src/dest to voronoi path (drop perpendicars to all edges and pick the shortest one)
-[ ] find next point (closest perpendicular point if src is not already there, o/w djikstra/bfs from src to destination)
+[x] Identify boundary vertices and add edges b/w them
+[x] Find a reachable corner point from src and dest
+[x] constuct a path from src corner point to dest corner point using bfs
 """
 
 import unittest
@@ -22,12 +22,16 @@ import random
 from copy import deepcopy
 import numpy as np
 import generate
+from graph import Graph
 from collections import deque
 
 def distance(dx, dy):
     return np.sqrt(dx**2 + dy**2)
 
 def num_digits(n):
+    """
+    returns number of digits in n
+    """
     if n==0:
         return 1
     count=0
@@ -35,6 +39,40 @@ def num_digits(n):
         count += 1
         n //= 10
     return count
+
+def interpolate(a, b):
+    """
+    returns the list of points on the line segment joining a and b
+    """
+    x1, y1 = a
+    x2, y2 = b
+
+    if x1==x2:
+        # vertical line
+        points = [(x1, t) for t in range(y1, y2, 1 if y2>y1 else -1)]
+    elif y1==y2:
+        # horizontal line
+        points = [(t, y1) for t in range(x1, x2, 1 if x2>x1 else -1)]
+    else:
+        # slanting line
+        slope = np.arctan((y2-y1)/(x2-x1)) # unit: radians
+        if x2<x1:
+            if y2>y1:
+                slope = np.pi + slope
+            else:
+                slope = slope - np.pi
+        # print(f"slope in degrees: {slope * 180 / np.pi}")
+        dist = int(np.ceil(distance(x2-x1, y2-y1)))
+        # print(f"distance: {dist}")
+        points = set()
+        for d in range(dist):
+            x = int(round(x1 + d * np.cos(slope)))
+            y = int(round(y1 + d * np.sin(slope)))
+            points.add((x, y))
+        points = list(points)
+        points.sort()
+    # print(f"points b/w {a} and {b}: {points}")
+    return points
 
 class Voronoi:
     def __init__(self, grid):
@@ -60,8 +98,7 @@ class Voronoi:
             self.margin.append([(0, np.inf, np.inf)] * self.n) # (closestObstacleId, displacementX, displacementY)
         self.dilate_obstacles()
 
-        self.vertices = []
-        self.edges = []
+        self.graph = Graph()
         self.generate_boundaries()
 
         return
@@ -139,23 +176,20 @@ class Voronoi:
         """
         identify corner vertices and generate a graph of edges connecting them.
         """
-        neighbouringRegions = [] # list of sets
+        self.neighbouringRegions = [] # list of sets of obstacleIds for which a vertex is a corner
         for i in range(self.m + 1):
             for j in range(self.n + 1):
                 isCornerVertex, regions = self.get_neighbours(i, j)
                 if isCornerVertex:
-                    self.vertices.append((i, j))
-                    self.edges.append([])
-                    neighbouringRegions.append(regions)
+                    self.graph.add_vertex((i, j))
+                    self.neighbouringRegions.append(regions)
 
         # add edge b/w vertices with >=2 common neighbours
-        numVertices = len(self.vertices)
-        for i in range(numVertices-1):
-            for j in range(i+1, numVertices):
-                intersection = neighbouringRegions[i].intersection(neighbouringRegions[j])
+        for i in range(self.graph.numVertices - 1):
+            for j in range(i+1, self.graph.numVertices):
+                intersection = self.neighbouringRegions[i].intersection(self.neighbouringRegions[j])
                 if len(intersection)>=2:
-                    self.edges[i].append(j)
-                    self.edges[j].append(i)
+                    self.graph.add_edge(i, j)
         return
 
     def print_grid(self):
@@ -188,15 +222,68 @@ class Voronoi:
 
     def print_boundary(self):
         print("===== boundary =====")
-        print(f"i: (x, y) | self.edges[i]")
-        for i, (x, y) in enumerate(self.vertices):
-            print(f"{i}: ({x}, {y}) | {self.edges[i]}")
+        print(f"i: (x, y) | self.graph.edges[i]")
+        for i, (x, y) in enumerate(self.graph.vertex):
+            print(f"{i}: ({x}, {y}) | {self.graph.edges[i]}")
 
-    def nextTarget(self, src, dest):
+    def is_path_clear(self, src, dest):
         """
-        returns the next points to approach
+        returns True iff there is no obstacle on the straight line path from src to dest
+        note: return True conservatively, in case of doubt return False since there are multiple candidates
+        assumption: src/dest coordinates are valid
         """
-        raise Exception("unimplemented")
+        points = interpolate(src, dest)
+        # print(f"points: {points}")
+        distanceThreshold = 1 # minimum allowed distance from obstacle
+        for x,y in points:
+            if distance(self.margin[x][y][1], self.margin[x][y][2]) < distanceThreshold:
+                return False
+        return True
+
+    def cornerVertex(self, coordinate):
+        """
+        returns one of the corners of the obstacle boundary in which the coordinate is present. The corner is such that it can be reached from the coordinate w/o hitting any obstacle.
+        """
+        x, y = coordinate
+
+        if self.map[x][y]>0:
+            raise Exception("obstacle at src location")
+        obstacleId = self.margin[x][y][0]
+        candidates = []
+        for i in range(self.graph.numVertices):
+            if obstacleId in self.neighbouringRegions[i]:
+                candidates.append(i)
+
+        for c in candidates:
+            vertex = self.graph.vertex[c]
+            # ensure that vertex coordinate lies within pixel grid
+            if vertex[0]==self.m:
+                vertex = (vertex[0]-1, vertex[1])
+            if vertex[1]==self.n:
+                vertex = (vertex[0], vertex[1]-1)
+            if self.is_path_clear((x, y), vertex):
+                return c
+
+        raise Exception("no valid path from src to dest")
+
+    def path(self, src, dest):
+        """
+        returns the list of waypoints to approach in order to reach the destination from src
+        """
+        if not (0<=src[0]<self.m and 0<=src[1]<self.n):
+            raise Exception("invalid src coordinate")
+        if not (0<=dest[0]<self.m and 0<=dest[1]<self.n):
+            raise Exception("invalid dest coordinate")
+
+        # srcV is a vertex that can be reached from src w/o hitting any obstacle
+        srcV = self.cornerVertex(src)
+
+        # destV is a vertex that can be reached from dest w/o hitting any obstacle
+        destV = self.cornerVertex(dest)
+
+        graphPath = self.graph.path(srcV, destV)
+        transformedPath = self.graph.transform(graphPath)
+        return [src] + transformedPath + [dest]
 
 class TestVoronoi(unittest.TestCase):
     def test_1(self):
@@ -209,16 +296,8 @@ class TestVoronoi(unittest.TestCase):
         voronoi = Voronoi(grid)
         voronoi.print_grid()
         voronoi.print_margin()
-        # src = (0, 0)
-        # dest = (m-1, n-1)
-        # nextTarget = voronoi.nextTarget(src, dest)
-        # answer = (0, 1)
-        # self.assertEqual(nextTarget, answer)
 
     def test_2(self):
-        """
-        test a specific input grid
-        """
         grid = np.array([
             [0,0,1,0,0,0,0,0,1,1],
             [0,0,0,1,0,0,1,1,0,0],
@@ -249,8 +328,80 @@ class TestVoronoi(unittest.TestCase):
         voronoi.print_margin()
         voronoi.print_boundary()
 
+    def test_4a(self):
+        grid = np.array([
+            [0,0,0,0,0,0,1,0,1,0],
+            [0,0,1,0,0,0,1,0,0,0],
+            [0,0,1,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,1],
+            [0,0,0,0,0,0,1,0,0,1],
+            [0,0,0,0,1,1,0,0,0,0]
+        ])
+        voronoi = Voronoi(grid)
+        # voronoi.print_grid()
+        # voronoi.print_map()
+        voronoi.print_margin()
+        voronoi.print_boundary()
+        src, dest = (3, 1), (6, 9)
+        ans = [src] + [(5, 5), (5, 7), (4, 9)] + [dest]
+        path = voronoi.path(src, dest)
+        print(f"path: {path}")
+        self.assertEqual(path, ans)
+
+    def test_4b(self):
+        grid = np.array([
+            [0,0,0,0,0,0,1,0,1,0],
+            [0,0,1,0,0,0,1,0,0,0],
+            [0,0,1,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,1],
+            [0,0,0,0,0,0,1,0,0,1],
+            [0,0,0,0,1,1,0,0,0,0]
+        ])
+        voronoi = Voronoi(grid)
+        # voronoi.print_grid()
+        # voronoi.print_map()
+        voronoi.print_margin()
+        voronoi.print_boundary()
+        src, dest = (2, 9), (8, 2)
+        ans = [src] + [(4, 9), (5, 7), (5, 5)] + [dest]
+        path = voronoi.path(src, dest)
+        print(f"path: {path}")
+        self.assertEqual(path, ans)
+
+    def test_4c(self):
+        grid = np.array([
+            [0,0,0,0,0,0,1,0,1,0],
+            [0,0,1,0,0,0,1,0,0,0],
+            [0,0,1,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,1],
+            [0,0,0,0,0,0,1,0,0,1],
+            [0,0,0,0,1,1,0,0,0,0]
+        ])
+        voronoi = Voronoi(grid)
+        # voronoi.print_grid()
+        # voronoi.print_map()
+        voronoi.print_margin()
+        voronoi.print_boundary()
+        src, dest = (9, 3), (9, 9)
+        ans = [src] + [(5, 5), (5, 7), (10, 8)] + [dest]
+        path = voronoi.path(src, dest)
+        print(f"path: {path}")
+        self.assertEqual(path, ans)
+
     def test_random(self):
-        m,n = 20, 20
+        m,n = 10, 10
         numOnes = 10
         grid = generate.generate_random_grid(m, n, numOnes)
         voronoi = Voronoi(grid)
