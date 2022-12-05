@@ -21,9 +21,10 @@ import unittest
 import random
 from copy import deepcopy
 import numpy as np
-import generate
-from graph import Graph
+from .generate import *
+from .graph import Graph
 from collections import deque
+import cv2
 
 def distance(dx, dy):
     return np.sqrt(dx**2 + dy**2)
@@ -90,7 +91,7 @@ class Voronoi:
         self.grid = grid
         self.m, self.n = len(grid), len(grid[0])
 
-        self.map, self.numObstacles = generate.convert_to_obstacle_map(grid)
+        self.map, self.numObstacles = convert_to_obstacle_map(grid)
         
         # self.margin contains closest obstacle and distance from it for every point
         self.margin = []
@@ -102,6 +103,40 @@ class Voronoi:
         self.generate_boundaries()
 
         return
+
+    def plot_regions(self):
+        """
+        returns an image such that boundary of each obstacle has a different color
+        """
+        # The 3 indicates that it is a color image with 3 channels (R, G, B)
+        img = np.zeros((self.m, self.n, 3), dtype=np.uint8)
+
+        # Generate 100 random colors and store them in a list
+        colors = []
+        for i in range(self.numObstacles):
+            r = random.randint(0, 255)
+            g = random.randint(0, 255)
+            b = random.randint(0, 255)
+            colors.append((r, g, b))
+
+        for i in range(self.m):
+            for j in range(self.n):
+                img[i][j] = colors[self.margin[i][j][0] - 1]
+
+        # # Save the image
+        # cv2.imwrite("colors.png", img)
+        return img
+
+    def visualise_path(self, path):
+        img = self.plot_regions()
+        for i in range(len(path)-1):
+            img = cv2.line(img, path[i][::-1], path[i+1][::-1], (255, 0, 0), 5)
+            img = cv2.circle(img, path[i+1][::-1], 10, (0, 255, 255), -1)
+
+        img = cv2.circle(img, path[0][::-1], 10, (255, 0, 0), -1)
+        img = cv2.circle(img, path[-1][::-1], 10, (0, 0, 255), -1)
+        cv2.imshow("Voronoi Path", img)
+        cv2.waitKey(1)
 
     def is_obstacle_boundary(self, x, y):
         """
@@ -275,11 +310,15 @@ class Voronoi:
         if not (0<=dest[0]<self.m and 0<=dest[1]<self.n):
             raise Exception("invalid dest coordinate")
 
+        print(f"src = {src}, dest = {dest}")
+
         # srcV is a vertex that can be reached from src w/o hitting any obstacle
         srcV = self.cornerVertex(src)
 
         # destV is a vertex that can be reached from dest w/o hitting any obstacle
         destV = self.cornerVertex(dest)
+
+        print(f"srcV = {self.graph.vertex[srcV]}, destV = {self.graph.vertex[destV]}")
 
         graphPath = self.graph.path(srcV, destV)
         transformedPath = self.graph.transform(graphPath)
@@ -403,7 +442,7 @@ class TestVoronoi(unittest.TestCase):
     def test_random(self):
         m,n = 10, 10
         numOnes = 10
-        grid = generate.generate_random_grid(m, n, numOnes)
+        grid = generate_random_grid(m, n, numOnes)
         voronoi = Voronoi(grid)
         voronoi.print_grid()
         # voronoi.print_map()

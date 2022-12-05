@@ -10,6 +10,7 @@ from sensor_msgs.msg import Image
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
 
+from util import transform_to_image_coordinates
 
 class LidarProcessing:
     def __init__(self, resolution=0.5, side_range=(-5., 5.), fwd_range=(0., 15.),
@@ -22,7 +23,7 @@ class LidarProcessing:
         self.cvBridge = CvBridge()
 
         # random size initial image
-        self.__birds_eye_view = np.zeros((200, 100))
+        self.__birds_eye_view = None
         self.gpsSensorData = GpsSensorData()
 
         self.birdsEyeViewPub = rospy.Publisher("/mp0/BirdsEye", Image, queue_size=1)
@@ -109,13 +110,7 @@ class LidarProcessing:
         y_points = y_points[indices]
         z_points = z_points[indices]
 
-        # convert points to image coords with resolution
-        x_img = np.floor(x_points / self.resolution).astype(np.int32)
-        y_img = np.floor(-y_points / self.resolution).astype(np.int32)
-
-        # shift coords to new original
-        x_img += int(np.floor(20 / self.resolution))
-        y_img += int(np.floor(10 / self.resolution))
+        x_img, y_img = transform_to_image_coordinates(x_points, y_points, self.resolution)
 
         # clip based on height for pixel Values
         pixel_vals = np.clip(a=z_points, a_min=self.height_range[0], a_max=self.height_range[1])
@@ -129,15 +124,13 @@ class LidarProcessing:
 
         return im
 
-    def processLidar(self):
+    def publish_birds_eye_view(self):
         """
             Publishes birds eye view image
-
             Inputs: None
-
             Outputs: None
         """
-
-        birds_eye_im = self.__birds_eye_view.astype(np.uint8)
-        birds_eye_im = self.cvBridge.cv2_to_imgmsg(birds_eye_im, 'mono8')
-        self.birdsEyeViewPub.publish(birds_eye_im)
+        if self.__birds_eye_view is not None:
+            birds_eye_im = self.__birds_eye_view.astype(np.uint8)
+            birds_eye_im = self.cvBridge.cv2_to_imgmsg(birds_eye_im, 'mono8')
+            self.birdsEyeViewPub.publish(birds_eye_im)
