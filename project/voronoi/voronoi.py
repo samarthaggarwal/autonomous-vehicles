@@ -24,6 +24,7 @@ import numpy as np
 from .generate import *
 from .graph import Graph
 from collections import deque
+import time
 import cv2
 
 def distance(dx, dy):
@@ -88,6 +89,7 @@ class Voronoi:
             [ 3,-3,-2,-2]
         ]
         """
+        # startTime = time.time()
         self.grid = grid
         self.m, self.n = len(grid), len(grid[0])
 
@@ -97,21 +99,27 @@ class Voronoi:
         self.margin = []
         for i in range(self.m):
             self.margin.append([(0, np.inf, np.inf)] * self.n) # (closestObstacleId, displacementX, displacementY)
+        # beforeDilate = time.time()
+        # print(f"before Dilate = {beforeDilate - startTime}")
         self.dilate_obstacles()
+        # afterDilate = time.time()
+        # print(f"after Dilate = {afterDilate - beforeDilate}")
 
         self.graph = Graph()
         self.generate_boundaries()
+        # afterBoundary = time.time()
+        # print(f"after Boundary = {afterBoundary - afterDilate}")
 
         return
 
     def plot_regions(self):
         """
-        returns an image such that boundary of each obstacle has a different color
+        returns an m*n image such that region of every obstacle has a different color
         """
         # The 3 indicates that it is a color image with 3 channels (R, G, B)
         img = np.zeros((self.m, self.n, 3), dtype=np.uint8)
 
-        # Generate 100 random colors and store them in a list
+        # Generate random colors and store them in a list
         colors = []
         for i in range(self.numObstacles):
             r = random.randint(0, 255)
@@ -121,22 +129,37 @@ class Voronoi:
 
         for i in range(self.m):
             for j in range(self.n):
-                img[i][j] = colors[self.margin[i][j][0] - 1]
+                isObstacle = self.margin[i][j][1]==0 and self.margin[i][j][2]==0
+                if isObstacle:
+                    # mark obstacles with black
+                    img[i][j] = (0, 0, 0)
+                else:
+                    # mark open spaces with color
+                    img[i][j] = colors[self.margin[i][j][0] - 1]
 
-        # # Save the image
-        # cv2.imwrite("colors.png", img)
+        cv2.imwrite("regions.png", img)
         return img
 
     def visualise_path(self, path):
+        """
+        plots the path on top of the obstacle regions
+        """
         img = self.plot_regions()
+        blue = (255, 0, 0)
+        red = (0, 0, 255)
+        yellow = (255, 255, 0)
+        radius = 2
+        thickness = 1
         for i in range(len(path)-1):
-            img = cv2.line(img, path[i][::-1], path[i+1][::-1], (255, 0, 0), 5)
-            img = cv2.circle(img, path[i+1][::-1], 10, (0, 255, 255), -1)
+            img = cv2.line(img, path[i][::-1], path[i+1][::-1], blue, thickness)
+            img = cv2.circle(img, path[i+1][::-1], radius, yellow, -1)
 
-        img = cv2.circle(img, path[0][::-1], 10, (255, 0, 0), -1)
-        img = cv2.circle(img, path[-1][::-1], 10, (0, 0, 255), -1)
-        cv2.imshow("Voronoi Path", img)
-        cv2.waitKey(1)
+        img = cv2.circle(img, path[0][::-1], radius, blue, -1) # source
+        img = cv2.circle(img, path[-1][::-1], radius, red, -1) # destination
+        cv2.imwrite("path.png", img)
+        # cv2.imshow("Voronoi Path", img)
+        # cv2.waitKey(1)
+        # plt.imshow(img)
 
     def is_obstacle_boundary(self, x, y):
         """
@@ -310,19 +333,21 @@ class Voronoi:
         if not (0<=dest[0]<self.m and 0<=dest[1]<self.n):
             raise Exception("invalid dest coordinate")
 
-        print(f"src = {src}, dest = {dest}")
-
         # srcV is a vertex that can be reached from src w/o hitting any obstacle
         srcV = self.cornerVertex(src)
 
         # destV is a vertex that can be reached from dest w/o hitting any obstacle
         destV = self.cornerVertex(dest)
 
-        print(f"srcV = {self.graph.vertex[srcV]}, destV = {self.graph.vertex[destV]}")
+        # print(f"src = {src}, dest = {dest}")
+        # print(f"srcV = {self.graph.vertex[srcV]}, destV = {self.graph.vertex[destV]}")
 
         graphPath = self.graph.path(srcV, destV)
         transformedPath = self.graph.transform(graphPath)
-        return [src] + transformedPath + [dest]
+        # each coordinate of path should be a valid pixel location
+        pixelPath = [ (min(x, self.m-1), min(y, self.n-1)) for x, y in transformedPath ]
+        # print(graphPath, transformedPath, pixelPath)
+        return [src] + pixelPath + [dest]
 
 class TestVoronoi(unittest.TestCase):
     def test_1(self):
@@ -381,8 +406,8 @@ class TestVoronoi(unittest.TestCase):
             [0,0,0,0,1,1,0,0,0,0]
         ])
         voronoi = Voronoi(grid)
-        # voronoi.print_grid()
-        # voronoi.print_map()
+        voronoi.print_grid()
+        voronoi.print_map()
         voronoi.print_margin()
         voronoi.print_boundary()
         src, dest = (3, 1), (6, 9)
@@ -434,20 +459,27 @@ class TestVoronoi(unittest.TestCase):
         voronoi.print_margin()
         voronoi.print_boundary()
         src, dest = (9, 3), (9, 9)
-        ans = [src] + [(5, 5), (5, 7), (10, 8)] + [dest]
+        ans = [src] + [(5, 5), (5, 7), (9, 8)] + [dest]
         path = voronoi.path(src, dest)
         print(f"path: {path}")
         self.assertEqual(path, ans)
+        # voronoi.visualise_path(path)
+        img = voronoi.plot_regions()
 
     def test_random(self):
-        m,n = 10, 10
+        m,n = 100, 100
         numOnes = 10
         grid = generate_random_grid(m, n, numOnes)
         voronoi = Voronoi(grid)
-        voronoi.print_grid()
+        # voronoi.print_grid()
         # voronoi.print_map()
-        voronoi.print_margin()
-        voronoi.print_boundary()
+        # voronoi.print_margin()
+        # voronoi.print_boundary()
+        src = (random.randint(0, m), random.randint(0, n))
+        dest = (random.randint(0, m), random.randint(0, n))
+        path = voronoi.path(src, dest)
+        # print(f"path: {path}")
+        voronoi.visualise_path(path)
 
 if __name__ == '__main__':
     unittest.main()

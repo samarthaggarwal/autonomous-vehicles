@@ -1,6 +1,9 @@
 import unittest
 from collections import deque
 
+class PathDoesNotExistError(Exception):
+    pass
+
 class Graph:
     def __init__(self):
         self.vertex = [] # [(x, y)] list of coordinates of vertices
@@ -66,7 +69,7 @@ class Graph:
 
         if node!=dest:
             # no path exists
-            return []
+            raise PathDoesNotExistError() # TODO - catch in summon.py
         else:
             path = []
             while parent[node]!=node:
