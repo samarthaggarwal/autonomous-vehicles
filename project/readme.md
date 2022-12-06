@@ -17,3 +17,24 @@ Run all tests
 ```python
 python voronoi.py
 ```
+
+The following code generates a grid of 100*100 pixels with randomly placed 0s (free space) and 1s (obstacles). It randomly generates a source and destination pixel location and then visualises the voronoi path to go from source to the destination.
+```python
+import cv2
+import matplotlib.pyplot as plt
+from voronoi import Voronoi
+from generate import *
+
+m,n = 100, 100
+numOnes = 10
+grid = generate_random_grid(m, n, numOnes)
+voronoi = Voronoi(grid)
+src = (random.randint(0, m-1), random.randint(0, n-1))
+dest = (random.randint(0, m-1), random.randint(0, n-1))
+print(f"{src} -> {dest}")
+path = voronoi.path(src, dest)
+print(path)
+voronoi.visualise_path(path)
+img = cv2.imread('path.png')
+plt.imshow(img)
+```
