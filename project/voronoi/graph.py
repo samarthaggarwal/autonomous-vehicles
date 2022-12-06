@@ -32,6 +32,8 @@ class Graph:
             raise Exception("invalid vertex b")
         if a==b:
             raise Exception("self edge is not allowed")
+        # if b in self.edges[a] or a in self.edges[b]:
+        #     raise Exception("duplicate edge is not allowed")
         self.edges[a].append(b)
         self.edges[b].append(a)
 

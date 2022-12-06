@@ -26,6 +26,7 @@ from .graph import Graph
 from collections import deque
 import time
 import cv2
+from matplotlib import pyplot as plt
 
 def distance(dx, dy):
     return np.sqrt(dx**2 + dy**2)
@@ -230,9 +231,20 @@ class Voronoi:
         isCornerVertex = len(neighbours) >= 2 if touchesBoundary else len(neighbours) >= 3
         return isCornerVertex, neighbours
 
+    def is_obstacle_vertex(self, x, y):
+        """
+        returns True iff the vertex (x, y) lies on an obstacle.
+        (x, y) is a point in the (m+1)*(n+1) grid of vertices.
+        """
+        return (x>0 and y>0 and self.map[x-1][y-1]>0) \
+            or (x<self.m and y>0 and self.map[x][y-1]>0) \
+            or (x>0 and y<self.n and self.map[x-1][y]>0) \
+            or (x<self.m and y<self.n and self.map[x][y]>0)
+
     def generate_boundaries(self):
         """
         identify corner vertices and generate a graph of edges connecting them.
+        also add 4 corners of image as vertices and edges along the image boundary.
         """
         self.neighbouringRegions = [] # list of sets of obstacleIds for which a vertex is a corner
         for i in range(self.m + 1):
@@ -242,12 +254,65 @@ class Voronoi:
                     self.graph.add_vertex((i, j))
                     self.neighbouringRegions.append(regions)
 
+        # add 4 corners of (m+1)*(n+1) grid
+        corners = [(0, 0), (self.m, 0), (0, self.n), (self.m, self.n)]
+        for corner in corners:
+            if corner in self.graph.vertex:
+                continue
+            x, y = corner
+            if self.is_obstacle_vertex(x, y):
+                continue
+            isCornerVertex, regions = self.get_neighbours(x, y)
+            self.graph.add_vertex(corner)
+            self.neighbouringRegions.append(regions)
+
         # add edge b/w vertices with >=2 common neighbours
         for i in range(self.graph.numVertices - 1):
             for j in range(i+1, self.graph.numVertices):
                 intersection = self.neighbouringRegions[i].intersection(self.neighbouringRegions[j])
                 if len(intersection)>=2:
                     self.graph.add_edge(i, j)
+
+        # add edges along grid boundaries
+        top, bottom, left, right = [], [], [], []
+        for i, v in enumerate(self.graph.vertex):
+            if v[0]==0:
+                top.append(i)
+            if v[0]==self.m:
+                bottom.append(i)
+            if v[1]==0:
+                left.append(i)
+            if v[1]==self.n:
+                right.append(i)
+        top.sort(key=lambda x: self.graph.vertex[x])
+        bottom.sort(key=lambda x: self.graph.vertex[x])
+        left.sort(key=lambda x: self.graph.vertex[x])
+        right.sort(key=lambda x: self.graph.vertex[x])
+        for i in range(len(top)-1):
+            a, b = self.graph.vertex[top[i]], self.graph.vertex[top[i+1]]
+            a = (min(a[0], self.m-1), min(a[1], self.n-1))
+            b = (min(b[0], self.m-1), min(b[1], self.n-1))
+            if self.is_path_clear(a, b):
+                self.graph.add_edge(top[i], top[i+1])
+        for i in range(len(bottom)-1):
+            a, b = self.graph.vertex[bottom[i]], self.graph.vertex[bottom[i+1]]
+            a = (min(a[0], self.m-1), min(a[1], self.n-1))
+            b = (min(b[0], self.m-1), min(b[1], self.n-1))
+            if self.is_path_clear(a, b):
+                self.graph.add_edge(bottom[i], bottom[i+1])
+        for i in range(len(left)-1):
+            a, b = self.graph.vertex[left[i]], self.graph.vertex[left[i+1]]
+            a = (min(a[0], self.m-1), min(a[1], self.n-1))
+            b = (min(b[0], self.m-1), min(b[1], self.n-1))
+            if self.is_path_clear(a, b):
+                self.graph.add_edge(left[i], left[i+1])
+        for i in range(len(right)-1):
+            a, b = self.graph.vertex[right[i]], self.graph.vertex[right[i+1]]
+            a = (min(a[0], self.m-1), min(a[1], self.n-1))
+            b = (min(b[0], self.m-1), min(b[1], self.n-1))
+            if self.is_path_clear(a, b):
+                self.graph.add_edge(right[i], right[i+1])
+
         return
 
     def print_grid(self):
@@ -463,8 +528,8 @@ class TestVoronoi(unittest.TestCase):
         path = voronoi.path(src, dest)
         print(f"path: {path}")
         self.assertEqual(path, ans)
-        # voronoi.visualise_path(path)
-        img = voronoi.plot_regions()
+        # img = voronoi.plot_regions()
+        voronoi.visualise_path(path)
 
     def test_random(self):
         m,n = 100, 100
@@ -475,8 +540,9 @@ class TestVoronoi(unittest.TestCase):
         # voronoi.print_map()
         # voronoi.print_margin()
         # voronoi.print_boundary()
-        src = (random.randint(0, m), random.randint(0, n))
-        dest = (random.randint(0, m), random.randint(0, n))
+        src = (random.randint(0, m-1), random.randint(0, n-1))
+        dest = (random.randint(0, m-1), random.randint(0, n-1))
+        # print(f"{src} -> {dest}")
         path = voronoi.path(src, dest)
         # print(f"path: {path}")
         voronoi.visualise_path(path)
