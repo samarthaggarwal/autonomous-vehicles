@@ -264,6 +264,31 @@ class PurePursuit(object):
     def dist(self, p1, p2):
         return round(np.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2), 3)
 
+    def calc_first_goal_point(self):
+        """ returns the closest waypoint as per the current location and orientation as the first goal """
+        self.path_points_x = np.array(self.path_points_lon_x)
+        self.path_points_y = np.array(self.path_points_lat_y)
+
+        curr_x, curr_y, curr_yaw = self.get_gem_state()
+
+        # finding the distance of each way point from the current position
+        for i in range(len(self.path_points_x)):
+            self.dist_arr[i] = self.dist((self.path_points_x[i], self.path_points_y[i]), (curr_x, curr_y))
+
+        # finding those points which are less than the look ahead distance (will be behind and ahead of the vehicle)
+        goal_arr = np.where( (self.dist_arr < self.look_ahead + 0.3) & (self.dist_arr > self.look_ahead - 0.3) )[0]
+
+        # finding the goal point which is the last in the set of points less than the lookahead distance
+        for idx in goal_arr:
+            v1 = [self.path_points_x[idx]-curr_x , self.path_points_y[idx]-curr_y]
+            v2 = [np.cos(curr_yaw), np.sin(curr_yaw)]
+            temp_angle = self.find_angle(v1,v2)
+            # find correct look-ahead point by using heading information
+            if abs(temp_angle) < np.pi/2:
+                nextGoal = idx
+                break
+        return nextGoal
+
     def start_pp(self):
         
         while not rospy.is_shutdown():
@@ -303,6 +328,7 @@ class PurePursuit(object):
 
                     self.gem_enable = True
 
+                    self.goal = self.calc_first_goal_point()
 
             self.path_points_x = np.array(self.path_points_lon_x)
             self.path_points_y = np.array(self.path_points_lat_y)
@@ -313,18 +339,26 @@ class PurePursuit(object):
             for i in range(len(self.path_points_x)):
                 self.dist_arr[i] = self.dist((self.path_points_x[i], self.path_points_y[i]), (curr_x, curr_y))
 
-            # finding those points which are less than the look ahead distance (will be behind and ahead of the vehicle)
-            goal_arr = np.where( (self.dist_arr < self.look_ahead + 0.3) & (self.dist_arr > self.look_ahead - 0.3) )[0]
+            """ Find nearest goal point in each iteration """
+            # # finding those points which are less than the look ahead distance (will be behind and ahead of the vehicle)
+            # goal_arr = np.where( (self.dist_arr < self.look_ahead + 0.3) & (self.dist_arr > self.look_ahead - 0.3) )[0]
 
-            # finding the goal point which is the last in the set of points less than the lookahead distance
-            for idx in goal_arr:
-                v1 = [self.path_points_x[idx]-curr_x , self.path_points_y[idx]-curr_y]
-                v2 = [np.cos(curr_yaw), np.sin(curr_yaw)]
-                temp_angle = self.find_angle(v1,v2)
-                # find correct look-ahead point by using heading information
-                if abs(temp_angle) < np.pi/2:
-                    self.goal = idx
-                    break
+            # # finding the goal point which is the last in the set of points less than the lookahead distance
+            # for idx in goal_arr:
+            #     v1 = [self.path_points_x[idx]-curr_x , self.path_points_y[idx]-curr_y]
+            #     v2 = [np.cos(curr_yaw), np.sin(curr_yaw)]
+            #     temp_angle = self.find_angle(v1,v2)
+            #     # find correct look-ahead point by using heading information
+            #     if abs(temp_angle) < np.pi/2:
+            #         self.goal = idx
+            #         break
+
+            """ Find nearest goal point in each iteration """
+            while self.dist_arr[self.goal] < self.look_ahead - 0.3 :
+                self.goal += 1
+                # loop around waypoints array
+                if self.goal >= len(self.path_points_x):
+                    self.goal = 0
 
             # finding the distance between the goal point and the vehicle
             # true look-ahead distance between a waypoint and current position
