@@ -174,6 +174,8 @@ class PurePursuit(object):
         self.lat     = inspva_msg.latitude  # latitude
         self.lon     = inspva_msg.longitude # longitude
         self.heading = inspva_msg.azimuth   # heading in degrees
+        x, y = self.wps_to_local_xy(self.lon, self.lat)
+        print(f"@,{x},{y},{self.heading}")
 
     def speed_callback(self, msg):
         self.speed = round(msg.data, 3) # forward velocity in m/s
@@ -219,7 +221,7 @@ class PurePursuit(object):
 
         # read recorded GPS lat, lon, heading
         dirname  = os.path.dirname(__file__)
-        filename = os.path.join(dirname, '../waypoints/xy_demo.csv')
+        filename = os.path.join(dirname, '../waypoints/eightnew.csv')
 
         with open(filename) as f:
             path_points = [tuple(line) for line in csv.reader(f)]
@@ -277,6 +279,7 @@ class PurePursuit(object):
 
         # finding those points which are less than the look ahead distance (will be behind and ahead of the vehicle)
         goal_arr = np.where( (self.dist_arr < self.look_ahead + 0.3) & (self.dist_arr > self.look_ahead - 0.3) )[0]
+        nextGoal = 0
 
         # finding the goal point which is the last in the set of points less than the lookahead distance
         for idx in goal_arr:
