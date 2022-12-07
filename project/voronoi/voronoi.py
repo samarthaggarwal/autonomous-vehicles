@@ -27,6 +27,7 @@ from collections import deque
 import time
 import cv2
 from matplotlib import pyplot as plt
+import utils
 
 def distance(dx, dy):
     return np.sqrt(dx**2 + dy**2)
@@ -370,7 +371,7 @@ class Voronoi:
         x, y = coordinate
 
         if self.map[x][y]>0:
-            raise Exception("obstacle at src location")
+            raise Exception("obstacle at src/dest location")
         obstacleId = self.margin[x][y][0]
         candidates = []
         for i in range(self.graph.numVertices):
@@ -380,10 +381,7 @@ class Voronoi:
         for c in candidates:
             vertex = self.graph.vertex[c]
             # ensure that vertex coordinate lies within pixel grid
-            if vertex[0]==self.m:
-                vertex = (vertex[0]-1, vertex[1])
-            if vertex[1]==self.n:
-                vertex = (vertex[0], vertex[1]-1)
+            vertex = (min(vertex[0], self.m-1), min(vertex[1], self.n-1))
             if self.is_path_clear((x, y), vertex):
                 return c
 
@@ -536,15 +534,23 @@ class TestVoronoi(unittest.TestCase):
         numOnes = 10
         grid = generate_random_grid(m, n, numOnes)
         voronoi = Voronoi(grid)
-        # voronoi.print_grid()
+        voronoi.print_grid()
         # voronoi.print_map()
         # voronoi.print_margin()
         # voronoi.print_boundary()
         src = (random.randint(0, m-1), random.randint(0, n-1))
         dest = (random.randint(0, m-1), random.randint(0, n-1))
-        # print(f"{src} -> {dest}")
+        print(f"{src} -> {dest}")
         path = voronoi.path(src, dest)
-        # print(f"path: {path}")
+        print(f"path: {path}")
+        voronoi.visualise_path(path)
+
+    def test_path_length(self):
+        grid = utils.readgrid("grids/2.txt")
+        voronoi = Voronoi(grid)
+        src, dest = (51, 42), (21, 20)
+        # [(51, 42), (44, 28), (41, 26), (6, 53), (0, 53), (21, 20)]
+        path = voronoi.path(src, dest)
         voronoi.visualise_path(path)
 
 if __name__ == '__main__':
