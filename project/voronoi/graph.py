@@ -1,5 +1,7 @@
 import unittest
 from collections import deque
+import numpy as np
+import heapq
 
 class PathDoesNotExistError(Exception):
     pass
@@ -79,6 +81,74 @@ class Graph:
                 node = parent[node]
             path.append(node)
             return path[::-1]
+
+    def edge_length(self, a: int, b: int):
+        """
+        returns length of edge b/w vertices a and b
+        """
+        x1, y1 = self.vertex[a]
+        x2, y2 = self.vertex[b]
+        return np.sqrt( (x1-x2)**2 + (y1-y2)**2 )
+
+    # def edge_length(self, a: int, b: int, weights):
+    #     """
+    #     returns length of edge b/w vertices a and b
+    #     """
+    #     a, b = min(a, b), max(a, b)
+    #     return weights[(a, b)]
+
+    # def shortest_path(self, src: int, dest: int, weights): # to test djikstra
+    def shortest_path(self, src: int, dest: int):
+        """
+        returns a list of vertices denoting the shortest path from src to dest. In case of multiple shortest paths, any one is returned. path contains src and dest vertices if it exists.
+        also returns distance of path
+        """
+        if not 0<=src<self.numVertices:
+            print(f"vertex: {src}")
+            raise Exception("invalid src")
+        if not 0<=dest<self.numVertices:
+            print(f"vertex: {dest}")
+            raise Exception("invalid dest")
+
+        if src==dest:
+            return [src], 0
+
+        parent = [-1] * self.numVertices
+        parent[src] = src
+        distance = [np.inf] * self.numVertices
+        distance[src] = 0
+
+        q = [(0, src)]
+        visited = set()
+        while q:
+            currDistance, node = heapq.heappop(q)
+            visited.add(node)
+            if node == dest:
+                break
+            for neighbour in self.edges[node]:
+                if neighbour in visited:
+                    continue
+                # newDistance = currDistance + self.edge_length(node, neighbour, weights)
+                newDistance = currDistance + self.edge_length(node, neighbour)
+                if distance[neighbour] == np.inf:
+                    distance[neighbour] = newDistance
+                    parent[neighbour] = node
+                    heapq.heappush(q, (newDistance, neighbour))
+                elif newDistance < distance[neighbour]:
+                    q.remove((distance[neighbour], neighbour))
+                    distance[neighbour] = newDistance
+                    parent[neighbour] = node
+                    heapq.heappush(q, (newDistance, neighbour))
+
+        if node != dest:
+            raise PathDoesNotExistError
+        else:
+            path = []
+            while parent[node]!=node:
+                path.append(node)
+                node = parent[node]
+            path.append(node)
+            return path[::-1], distance[dest]
 
     def transform(self, path):
         """ 
@@ -162,9 +232,52 @@ class TestGraph(unittest.TestCase):
         # graph.add_edge(6, 8)
         # graph.add_edge(7, 8)
 
-        path = graph.path(2, 8)
-        print(path)
-        self.assertEqual(path, [])
+        exceptionRaised = False
+        try:
+            path = graph.path(2, 8)
+        except PathDoesNotExistError:
+            exceptionRaised = True
+        self.assertTrue(exceptionRaised)
+
+    def test_djikstra(self):
+        # uncomment function with weights before running this test
+        graph = Graph()
+        n = 9
+        for i in range(n):
+            graph.add_vertex(i)
+        graph.add_edge(0, 1)
+        graph.add_edge(0, 7)
+        graph.add_edge(1, 2)
+        graph.add_edge(1, 7)
+        graph.add_edge(2, 3)
+        graph.add_edge(2, 5)
+        graph.add_edge(2, 8)
+        graph.add_edge(3, 4)
+        graph.add_edge(3, 5)
+        graph.add_edge(4, 5)
+        graph.add_edge(5, 6)
+        graph.add_edge(6, 7)
+        graph.add_edge(6, 8)
+        graph.add_edge(7, 8)
+        weights = {}
+        weights[(0, 1)] = 4
+        weights[(0, 7)] = 8
+        weights[(1, 2)] = 8
+        weights[(1, 7)] = 11
+        weights[(2, 3)] = 7
+        weights[(2, 5)] = 4
+        weights[(2, 8)] = 2
+        weights[(3, 4)] = 9
+        weights[(3, 5)] = 14
+        weights[(4, 5)] = 10
+        weights[(5, 6)] = 2
+        weights[(6, 7)] = 1
+        weights[(6, 8)] = 6
+        weights[(7, 8)] = 7
+
+        for i in range(n):
+            path, distance = graph.shortest_path(0, i, weights)
+            print(f"{0} -> {i} | {distance} | {path}")
 
 if __name__ == '__main__':
     unittest.main()

@@ -408,7 +408,8 @@ class Voronoi:
         # print(f"src = {src}, dest = {dest}")
         # print(f"srcV = {self.graph.vertex[srcV]}, destV = {self.graph.vertex[destV]}")
 
-        graphPath = self.graph.path(srcV, destV)
+        # graphPath = self.graph.path(srcV, destV)
+        graphPath = self.graph.shortest_path(srcV, destV)
         transformedPath = self.graph.transform(graphPath)
         # each coordinate of path should be a valid pixel location
         pixelPath = [ (min(x, self.m-1), min(y, self.n-1)) for x, y in transformedPath ]
