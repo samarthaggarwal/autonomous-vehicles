@@ -1,4 +1,4 @@
-# Challenge 3: GPS Scribbling
+# Challenge 4: GPS Scribbling
 
 In this challenge, we run the vehicle as per the waypoints (GPS coordinates) given to it via a csv file.
 
@@ -28,6 +28,10 @@ roslaunch gem_launch gem_sensor_info.launch
 
 In another terminal, run the following command to run the vehicle as per the waypoints.
 ```commandline
+# for simulation
 rosrun gem_pure_pursuit_sim pure_pursuit_sequential_sim.py
+
+# for production
+rosrun gem_gnss pure_pursuit_pp_tracker_pid.py
 ```
 
