@@ -420,6 +420,9 @@ class Voronoi:
         for s in srcV:
             for d in destV:
                 graphPath, pathLength = self.graph.shortest_path(s, d)
+                sVertex = self.graph.vertex[s]
+                dVertex = self.graph.vertex[d]
+                pathLength += distance(src[0]-sVertex[0], src[1]-sVertex[1]) + distance(dest[0]-dVertex[0], dest[1]-dVertex[1])
                 tPath = self.graph.transform(graphPath)
                 # print(self.graph.vertex[s], self.graph.vertex[d], pathLength, tPath)
                 if pathLength < shortestPathLength:

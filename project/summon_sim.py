@@ -26,7 +26,7 @@ import alvinxy.alvinxy as axy
 from voronoi.voronoi import Voronoi
 from cv_bridge import CvBridge
 import numpy as np
-from lidar.util import transform_to_image_coordinates, transform_to_taped_coordinates
+from lidar.util import *
 from lidar.config import resolution
 
 
@@ -153,19 +153,13 @@ class Summon(object):
             print(self.curr_lat, self.curr_lon)
             lon_wp_x, lat_wp_y = axy.ll2xy(self.curr_lat, self.curr_lon, self.olat, self.olon)
 
-            origin_shift_x = curr_x - lon_wp_x
-            origin_shift_y = curr_y - lat_wp_y
-            print("Lon wp x: ", lon_wp_x)
-            print("Lat wp y: ", lat_wp_y)
-            print("Curr Yaw Value: ", curr_yaw * 180.0 / np.pi)
-
             srcImage = transform_to_image_coordinates(lon_wp_x, lat_wp_y, resolution)
 
             while self.obstacleMap is None:
                 self.rate.sleep()
             # beforeVoronoi = time.time()
             # print(f"before Voronoi = {beforeVoronoi - startTime}")
-            print(f"Obstacle Map Shape - {self.obstacleMap.shape}")
+            # print(f"Obstacle Map Shape - {self.obstacleMap.shape}")
             # if self.prev_loc is None or self.dist(self.prev_loc, (curr_x, curr_y)) >= 5:
             if True:
                 voronoi = Voronoi(self.obstacleMap)
@@ -186,24 +180,27 @@ class Summon(object):
                 # print(f"after Path = {afterPath - afterInit}")
                 if len(path) == 0:
                     raise Exception("No path exists")
-                print(f"path: {path}")
+                # print(f"path: {path}")
                 self.plot_path(path, voronoi.plot_regions())
                 nextPointImage = path[1]
                 self.prev_loc = (curr_x, curr_y)
 
-            nextPointRealX, nextPointRealY = transform_to_taped_coordinates(nextPointImage[1], nextPointImage[0])
+            print("next point image", nextPointImage)
 
-            nextPointRealX += origin_shift_x
-            nextPointRealY += origin_shift_y
+            nextPointRealX, nextPointRealY = transform_to_taped_coordinates(nextPointImage[1], nextPointImage[0], resolution)
+
+            print("next taped - ", nextPointRealX, nextPointRealY)
+
+            nextPointRealX, nextPointRealY = transform_tape_to_simulator(nextPointRealX, nextPointRealY)
 
             # finding the distance of each way point from the current position
             L = self.dist((nextPointRealX, nextPointRealY), (curr_x, curr_y))
-            print("Next Point Chase = ", nextPointRealX, nextPointRealY, L)
+            dist_from_dest = self.dist(self.destination, (lon_wp_x, lat_wp_y))
 
             # finding the distance between the goal point and the vehicle
             # true look-ahead distance between a waypoint and current position
 
-            print(f"goal: {self.goal}, L:{L}")
+            # print(f"goal: {self.goal}, L:{L}")
 
             # transforming the goal point into the vehicle coordinate frame
             gvcx = nextPointRealX - curr_x
@@ -211,30 +208,44 @@ class Summon(object):
             goal_x_veh_coord = gvcx * np.cos(curr_yaw) + gvcy * np.sin(curr_yaw)
             goal_y_veh_coord = gvcy * np.cos(curr_yaw) - gvcx * np.sin(curr_yaw)
 
-            orient = heading_to_yaw((np.arctan2(gvcx, gvcy) * 180 / np.pi + 360.0) % 360.0)
+            orient = np.arctan2(gvcy, gvcx)
 
-            print(f"curr_x {curr_x}, curr_y {curr_y}, next_real_x {nextPointRealX}, next real y {nextPointRealY}")
+            print("Curr Yaw Value: ", curr_yaw * 180.0 / np.pi)
+            print(f"Orientation - {orient*180/np.pi}")
 
-            print(f"Orientation - {orient}")
+            print(f"curr_x {curr_x}, curr_y {curr_y}, next_simulx {nextPointRealX}, next simul y {nextPointRealY}")
+            # print(f"gvcy: {gvcy}, gvcx: {gvcx}")
+
 
             # find the curvature and the angle
             # alpha = self.path_points_yaw[self.goal] - (curr_yaw)
             alpha = orient - curr_yaw
             k = 0.285
-            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / L)
+            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / math.sqrt(L))
             angle = angle_i * 2
             # angle = round(np.clip(angle, -0.61, 0.61), 3)
 
-            print("Steering Angle - ", angle)
+            print("Alpha - ", alpha*180.0/np.pi)
+            print("L: ", L)
+
+            print("Steering Angle - ", angle*180.0/np.pi)
 
             ct_error = round(np.sin(alpha) * L, 3)
 
-            print("Crosstrack Error: " + str(ct_error))
+            # print("Crosstrack Error: " + str(ct_error))
 
             # implement constant pure pursuit controller
             self.ackermann_msg.speed = 2.8
+            if L < 5.0:
+                self.ackermann_msg.speed = 1.0
+            if dist_from_dest < 4.0:
+                self.ackermann_msg.speed = 0.0
             self.ackermann_msg.steering_angle = angle
             self.ackermann_pub.publish(self.ackermann_msg)
+
+            if dist_from_dest < 4.0:
+                print("Destination Reached!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                break
 
             # endTime = time.time()
             # print(f"end = {endTime - afterPath}")
