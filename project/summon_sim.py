@@ -30,6 +30,22 @@ from lidar.util import transform_to_image_coordinates, transform_to_taped_coordi
 from lidar.config import resolution
 
 
+def heading_to_yaw(heading_curr):
+    # 0   <= heading < 90  --- 90 to 0     (pi/2 to 0)
+    # 90  <= heading < 180 --- 0 to -90    (0 to -pi/2)
+    # 180 <= heading < 270 --- -90 to -180 (-pi/2 to -pi)
+    # 270 <= heading < 360 --- 180 to 90   (pi to pi/2)
+    if (heading_curr >= 0 and heading_curr < 90):
+        yaw_curr = np.radians(90 - heading_curr)
+    elif (heading_curr >= 90 and heading_curr < 180):
+        yaw_curr = np.radians(90 - heading_curr)
+    elif (heading_curr >= 180 and heading_curr < 270):
+        yaw_curr = np.radians(90 - heading_curr)
+    else:
+        yaw_curr = np.radians(450 - heading_curr)
+    return yaw_curr
+
+
 class Summon(object):
 
     def __init__(self):
@@ -40,7 +56,6 @@ class Summon(object):
         self.wheelbase = 1.75  # meters
         self.goal = 0
 
-        self.read_waypoints()  # read waypoints
         self.olat, self.olon = 40.0928563, -88.2359994
 
         self.ackermann_msg = AckermannDrive()
@@ -66,35 +81,17 @@ class Summon(object):
         # convert to image coordinate system
         self.destinationImageCoordinates = transform_to_image_coordinates(self.destination[0], self.destination[1],
                                                                           resolution)
+        self.prev_loc = None
 
     def updateObstacleMap(self, data):
         """
         update obstacle map on every event
         """
         self.obstacleMap = self.cvBridge.imgmsg_to_cv2(data, 'mono8').astype(np.uint8) // 255
-        # print(self.obstacleMap)
 
-    # import waypoints.csv into a list (path_points)
     def update_gps(self, gps_data):
-        # print("updated GPS")
         self.curr_lat = gps_data.latitude
         self.curr_lon = gps_data.longitude
-
-    def read_waypoints(self):
-
-        dirname = os.path.dirname(__file__)
-        filename = os.path.join(dirname, '/home/akash/Documents/autonomous-vehicles/mp4/oval.csv')
-
-        with open(filename) as f:
-            path_points = [tuple(line) for line in csv.reader(f)]
-
-        # print(path_points)
-
-        # turn path_points into a list of floats to eliminate the need for casts
-        self.path_points_x = [float(point[0]) for point in path_points]
-        self.path_points_y = [float(point[1]) for point in path_points]
-        self.path_points_yaw = [self.heading_to_yaw(float(point[2])) for point in path_points]
-        self.dist_arr = np.zeros(len(self.path_points_x))
 
     # computes the Euclidean distance between two 2D points
     def dist(self, p1, p2):
@@ -108,9 +105,7 @@ class Summon(object):
         return np.arctan2(sinang, cosang)
 
     def get_gem_pose(self):
-
         rospy.wait_for_service('/gazebo/get_model_state')
-
         try:
             service_response = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
             model_state = service_response(model_name='gem')
@@ -126,35 +121,20 @@ class Summon(object):
 
         return round(x, 4), round(y, 4), round(yaw, 4)
 
-    def heading_to_yaw(self, heading_curr):
-        # 0   <= heading < 90  --- 90 to 0     (pi/2 to 0)
-        # 90  <= heading < 180 --- 0 to -90    (0 to -pi/2)
-        # 180 <= heading < 270 --- -90 to -180 (-pi/2 to -pi)
-        # 270 <= heading < 360 --- 180 to 90   (pi to pi/2)
-        if (heading_curr >= 0 and heading_curr < 90):
-            yaw_curr = np.radians(90 - heading_curr)
-        elif (heading_curr >= 90 and heading_curr < 180):
-            yaw_curr = np.radians(90 - heading_curr)
-        elif (heading_curr >= 180 and heading_curr < 270):
-            yaw_curr = np.radians(90 - heading_curr)
-        else:
-            yaw_curr = np.radians(450 - heading_curr)
-        return yaw_curr
-
     def plot_path(self, path, obstacleMapRGB):
         """
         plots path on RVIZ
         """
         if self.obstacleMap is None or len(path)<2:
             return
-        # obstacleMapRGB = cv2.cvtColor(self.obstacleMap * 255, cv2.COLOR_GRAY2RGB)
         color = (0, 255, 0)
         for i in range(len(path)-1):
             obstacleMapRGB = cv2.line(obstacleMapRGB, path[i][::-1], path[i+1][::-1], color, 5)
-            obstacleMapRGB = cv2.circle(obstacleMapRGB, path[i+1][::-1], 10, (0, 255, 255), -1)
+            obstacleMapRGB = cv2.circle(obstacleMapRGB, path[i+1][::-1], 3, (0, 255, 255), -1)
+            obstacleMapRGB = cv2.circle(obstacleMapRGB, path[i][::-1], 3, (0, 255, 255), -1)
 
-        obstacleMapRGB = cv2.circle(obstacleMapRGB, path[0][::-1], 10, (255, 0, 0), -1)
-        obstacleMapRGB = cv2.circle(obstacleMapRGB, path[-1][::-1], 10, (0, 0, 255), -1)
+        obstacleMapRGB = cv2.circle(obstacleMapRGB, path[0][::-1], 3, (255, 0, 0), -1)
+        obstacleMapRGB = cv2.circle(obstacleMapRGB, path[-1][::-1], 3, (0, 0, 255), -1)
 
         obstacleMapRGB = obstacleMapRGB.astype(np.uint8)
         # cv2.imshow("Voronoi Path", obstacleMapRGB)
@@ -186,19 +166,30 @@ class Summon(object):
             # beforeVoronoi = time.time()
             # print(f"before Voronoi = {beforeVoronoi - startTime}")
             print(f"Obstacle Map Shape - {self.obstacleMap.shape}")
-            voronoi = Voronoi(self.obstacleMap)
-            # afterInit = time.time()
-            # print(f"after Init = {afterInit - beforeVoronoi}")
-            path = voronoi.path(srcImage[::-1], self.destinationImageCoordinates[::-1])
-            # afterPath = time.time()
-            # print(f"after Path = {afterPath - afterInit}")
-            if len(path) == 0:
-                raise Exception("No path exists")
-            print(f"path: {path}")
-            # voronoi.visualise_path(path)
-            self.plot_path(path, voronoi.plot_regions())
-            nextPointImage = path[1]
-            # nextPointImage = (0, 0)
+            # if self.prev_loc is None or self.dist(self.prev_loc, (curr_x, curr_y)) >= 5:
+            if True:
+                voronoi = Voronoi(self.obstacleMap)
+                # afterInit = time.time()
+                # print(f"after Init = {afterInit - beforeVoronoi}")
+                # im = voronoi.plot_regions()
+                # im = cv2.circle(im, srcImage, 3, (255, 0, 0), -1)
+                # im = cv2.circle(im, self.destinationImageCoordinates, 3, (0, 0, 255), -1)
+                #
+                # cv2.imshow("Voronoi Path", im)
+                # cv2.waitKey(0)
+                try:
+                    path = voronoi.path(srcImage[::-1], self.destinationImageCoordinates[::-1])
+                except Exception as e:
+                    print(str(e))
+                    continue
+                # afterPath = time.time()
+                # print(f"after Path = {afterPath - afterInit}")
+                if len(path) == 0:
+                    raise Exception("No path exists")
+                print(f"path: {path}")
+                self.plot_path(path, voronoi.plot_regions())
+                nextPointImage = path[1]
+                self.prev_loc = (curr_x, curr_y)
 
             nextPointRealX, nextPointRealY = transform_to_taped_coordinates(nextPointImage[1], nextPointImage[0])
 
@@ -206,12 +197,11 @@ class Summon(object):
             nextPointRealY += origin_shift_y
 
             # finding the distance of each way point from the current position
-            distance = self.dist((nextPointRealX, nextPointRealY), (curr_x, curr_y))
-            print("Next Point Chase = ", nextPointRealX, nextPointRealY, distance)
+            L = self.dist((nextPointRealX, nextPointRealY), (curr_x, curr_y))
+            print("Next Point Chase = ", nextPointRealX, nextPointRealY, L)
 
             # finding the distance between the goal point and the vehicle
             # true look-ahead distance between a waypoint and current position
-            L = distance
 
             print(f"goal: {self.goal}, L:{L}")
 
@@ -221,7 +211,11 @@ class Summon(object):
             goal_x_veh_coord = gvcx * np.cos(curr_yaw) + gvcy * np.sin(curr_yaw)
             goal_y_veh_coord = gvcy * np.cos(curr_yaw) - gvcx * np.sin(curr_yaw)
 
-            orient = (np.arctan2(gvcx, gvcy) * 180 / np.pi + 360.0) % 360.0
+            orient = heading_to_yaw((np.arctan2(gvcx, gvcy) * 180 / np.pi + 360.0) % 360.0)
+
+            print(f"curr_x {curr_x}, curr_y {curr_y}, next_real_x {nextPointRealX}, next real y {nextPointRealY}")
+
+            print(f"Orientation - {orient}")
 
             # find the curvature and the angle
             # alpha = self.path_points_yaw[self.goal] - (curr_yaw)
@@ -229,7 +223,7 @@ class Summon(object):
             k = 0.285
             angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / L)
             angle = angle_i * 2
-            angle = round(np.clip(angle, -0.61, 0.61), 3)
+            # angle = round(np.clip(angle, -0.61, 0.61), 3)
 
             print("Steering Angle - ", angle)
 
