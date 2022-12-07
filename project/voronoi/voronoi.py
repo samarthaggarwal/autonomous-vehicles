@@ -21,15 +21,15 @@ import unittest
 import random
 from copy import deepcopy
 import numpy as np
-# from .generate import *
-from generate import *
-# from .graph import Graph
-from graph import Graph
+from .generate import *
+# from generate import *
+from .graph import Graph
+# from graph import Graph
 from collections import deque
 import time
 import cv2
 from matplotlib import pyplot as plt
-import utils
+from .utils import *
 
 def distance(dx, dy):
     return np.sqrt(dx**2 + dy**2)
@@ -565,7 +565,7 @@ class TestVoronoi(unittest.TestCase):
         voronoi.visualise_path(path)
 
     def test_path_length(self):
-        grid = utils.readgrid("grids/2.txt")
+        grid = readgrid("grids/2.txt")
         voronoi = Voronoi(grid)
         src, dest = (51, 42), (21, 20)
         print(f"{src} -> {dest}")
