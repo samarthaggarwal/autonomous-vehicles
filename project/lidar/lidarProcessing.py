@@ -4,7 +4,7 @@ import numpy as np
 import rospy
 import cv2
 from cv_bridge import CvBridge
-from sensor_data import GpsSensorData
+from sensor_data import GpsSensorData, GpsSensorRealData
 
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import PointCloud2
@@ -12,9 +12,10 @@ from sensor_msgs import point_cloud2
 
 from util import transform_to_image_coordinates
 
+
 class LidarProcessing:
     def __init__(self, resolution=0.5, side_range=(-5., 5.), fwd_range=(0., 15.),
-                 height_range=(-1, 1)):
+                 height_range=(-1, 1), is_real_mode=False):
         self.resolution = resolution
         self.side_range = side_range
         self.fwd_range = fwd_range
@@ -24,11 +25,16 @@ class LidarProcessing:
 
         # random size initial image
         self.__birds_eye_view = None
-        self.gpsSensorData = GpsSensorData()
+        if is_real_mode:
+            self.gpsSensorData = GpsSensorRealData()
+        else:
+            self.gpsSensorData = GpsSensorData()
 
         self.birdsEyeViewPub = rospy.Publisher("/mp0/BirdsEye", Image, queue_size=1)
-        self.pointCloudSub = rospy.Subscriber("/velodyne_points", PointCloud2, self.__pointCloudHandler, queue_size=10)
-        # self.pointCloudSub = rospy.Subscriber("/lidar1/velodyne_points", PointCloud2, self.__pointCloudHandler, queue_size=10)
+        if is_real_mode:
+            self.pointCloudSub = rospy.Subscriber("/lidar1/velodyne_points", PointCloud2, self.__pointCloudHandler, queue_size=10)
+        else:
+            self.pointCloudSub = rospy.Subscriber("/velodyne_points", PointCloud2, self.__pointCloudHandler, queue_size=10)
 
     def getBirdsEyeView(self):
         return self.__birds_eye_view
@@ -54,7 +60,7 @@ class LidarProcessing:
     def transform_points_to_self_defined_origin(self, x_points, y_points):
         curr_x, curr_y, curr_yaw = self.gpsSensorData.get_current_gps_sensor()
         # yaw calibration
-        curr_yaw = -1*np.radians(180.0 - curr_yaw)
+        curr_yaw = -1 * np.radians(180.0 - curr_yaw)
         transformed_x = x_points * np.cos(curr_yaw) - y_points * np.sin(curr_yaw)
         transformed_y = x_points * np.sin(curr_yaw) + y_points * np.cos(curr_yaw)
         return transformed_x + curr_x, transformed_y + curr_y
@@ -87,19 +93,21 @@ class LidarProcessing:
         z_points = data[:, 2]
 
         # Only keep points in the range specified above
-        # fwd_filt = np.logical_and((x_points >= self.fwd_range[0]), (x_points <= self.fwd_range[1]))
-        # side_filt = np.logical_and((y_points >= -self.side_range[1]), (y_points <= -self.side_range[0]))
-        # filter = np.logical_and(fwd_filt, side_filt)
-        # indices = np.argwhere(filter).flatten()
-        #
-        # x_points = x_points[indices]
-        # y_points = y_points[indices]
-        # z_points = z_points[indices]
+        fwd_filt = np.logical_and((x_points >= self.fwd_range[0]), (x_points <= self.fwd_range[1]))
+        side_filt = np.logical_and((y_points >= self.side_range[0]), (y_points <= self.side_range[1]))
+        height_filt = np.logical_and((z_points >= self.height_range[0]), (z_points <= self.height_range[1]))
+        filter = np.logical_and(fwd_filt, side_filt)
+        filter = np.logical_and(filter, height_filt)
+        indices = np.argwhere(filter).flatten()
+
+        x_points = x_points[indices]
+        y_points = y_points[indices]
+        z_points = z_points[indices]
 
         # transform these points to coordinate system defined by the user
         x_points, y_points = self.transform_points_to_self_defined_origin(x_points, y_points)
-        print("X points = ", x_points)
-        print("Y points = ", y_points)
+        # print("X points = ", x_points)
+        # print("Y points = ", y_points)
 
         fwd_filt = np.logical_and((x_points >= -20), (x_points <= 60))
         side_filt = np.logical_and((y_points >= -20), (y_points <= 10))
@@ -120,6 +128,7 @@ class LidarProcessing:
 
         pixel_vals = scale_to_255(pixel_vals, min_val=self.height_range[0], max_val=self.height_range[1])
 
+        # print(x_img, y_img)
         im[y_img, x_img] = pixel_vals
 
         return im

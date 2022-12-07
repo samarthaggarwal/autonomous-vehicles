@@ -189,13 +189,13 @@ class Summon(object):
             voronoi = Voronoi(self.obstacleMap)
             # afterInit = time.time()
             # print(f"after Init = {afterInit - beforeVoronoi}")
-            path = voronoi.path((srcImage[1], srcImage[0]), (self.destinationImageCoordinates[1], self.destinationImageCoordinates[0]))
+            path = voronoi.path(srcImage[::-1], self.destinationImageCoordinates[::-1])
             # afterPath = time.time()
             # print(f"after Path = {afterPath - afterInit}")
-            if len(path)==0:
+            if len(path) == 0:
                 raise Exception("No path exists")
             print(f"path: {path}")
-            voronoi.visualise_path(path)
+            # voronoi.visualise_path(path)
             self.plot_path(path, voronoi.plot_regions())
             nextPointImage = path[1]
             # nextPointImage = (0, 0)
@@ -207,6 +207,7 @@ class Summon(object):
 
             # finding the distance of each way point from the current position
             distance = self.dist((nextPointRealX, nextPointRealY), (curr_x, curr_y))
+            print("Next Point Chase = ", nextPointRealX, nextPointRealY, distance)
 
             # finding the distance between the goal point and the vehicle
             # true look-ahead distance between a waypoint and current position
@@ -220,12 +221,17 @@ class Summon(object):
             goal_x_veh_coord = gvcx * np.cos(curr_yaw) + gvcy * np.sin(curr_yaw)
             goal_y_veh_coord = gvcy * np.cos(curr_yaw) - gvcx * np.sin(curr_yaw)
 
+            orient = (np.arctan2(gvcx, gvcy) * 180 / np.pi + 360.0) % 360.0
+
             # find the curvature and the angle
-            alpha = self.path_points_yaw[self.goal] - (curr_yaw)
+            # alpha = self.path_points_yaw[self.goal] - (curr_yaw)
+            alpha = orient - curr_yaw
             k = 0.285
             angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / L)
             angle = angle_i * 2
             angle = round(np.clip(angle, -0.61, 0.61), 3)
+
+            print("Steering Angle - ", angle)
 
             ct_error = round(np.sin(alpha) * L, 3)
 
@@ -234,7 +240,7 @@ class Summon(object):
             # implement constant pure pursuit controller
             self.ackermann_msg.speed = 2.8
             self.ackermann_msg.steering_angle = angle
-            # self.ackermann_pub.publish(self.ackermann_msg)
+            self.ackermann_pub.publish(self.ackermann_msg)
 
             # endTime = time.time()
             # print(f"end = {endTime - afterPath}")

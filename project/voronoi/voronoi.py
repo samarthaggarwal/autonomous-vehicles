@@ -271,7 +271,7 @@ class Voronoi:
         for i in range(self.graph.numVertices - 1):
             for j in range(i+1, self.graph.numVertices):
                 intersection = self.neighbouringRegions[i].intersection(self.neighbouringRegions[j])
-                if len(intersection)>=2:
+                if len(intersection)>=2 and self.is_path_clear(self.graph.vertex[i], self.graph.vertex[j]):
                     self.graph.add_edge(i, j)
 
         # add edges along grid boundaries
@@ -395,6 +395,9 @@ class Voronoi:
             raise Exception("invalid src coordinate")
         if not (0<=dest[0]<self.m and 0<=dest[1]<self.n):
             raise Exception("invalid dest coordinate")
+
+        if self.margin[src[0]][src[1]][0] == self.margin[dest[0]][dest[1]][0] and self.is_path_clear(src, dest):
+            return [src, dest]
 
         # srcV is a vertex that can be reached from src w/o hitting any obstacle
         srcV = self.cornerVertex(src)
