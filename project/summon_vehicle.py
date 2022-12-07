@@ -27,7 +27,8 @@ import alvinxy.alvinxy as axy # Import AlvinXY transformation module
 import rospy
 
 # GEM Sensor Headers
-from std_msgs.msg import String, Bool, Float32, Float64, Image
+from std_msgs.msg import String, Bool, Float32, Float64
+from sensor_msgs.msg import Image
 from novatel_gps_msgs.msg import NovatelPosition, NovatelXYZ, Inspva
 
 # GEM PACMod Headers
@@ -128,7 +129,7 @@ class PurePursuit(object):
 
         # read waypoints into the system 
         self.goal       = 0            
-        self.read_waypoints() 
+        # self.read_waypoints() 
 
         self.desired_speed = 0.75  # m/s, reference speed
         self.max_accel     = 0.4 # % of acceleration
