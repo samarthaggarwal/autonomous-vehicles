@@ -39,6 +39,8 @@ class ProcessBirdsEyeView:
         processedImg = self.preprocessImg(img)
         if self.aggregated_img is None:
             self.aggregated_img = processedImg
+            self.aggregated_img[0, :] = 255
+            self.aggregated_img[-1, :] = 255
         else:
             self.aggregated_img = self.aggregated_img + processedImg
             self.aggregated_img = np.where(self.aggregated_img > 0, 255, 0).astype(np.uint8)
