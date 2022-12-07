@@ -21,8 +21,10 @@ import unittest
 import random
 from copy import deepcopy
 import numpy as np
-from .generate import *
-from .graph import Graph
+# from .generate import *
+from generate import *
+# from .graph import Graph
+from graph import Graph
 from collections import deque
 import time
 import cv2
@@ -360,13 +362,14 @@ class Voronoi:
         # print(f"points: {points}")
         distanceThreshold = 1 # minimum allowed distance from obstacle
         for x,y in points:
+            x, y = min(x, self.m-1), min(y, self.n-1)
             if distance(self.margin[x][y][1], self.margin[x][y][2]) < distanceThreshold:
                 return False
         return True
 
     def cornerVertex(self, coordinate):
         """
-        returns one of the corners of the obstacle boundary in which the coordinate is present. The corner is such that it can be reached from the coordinate w/o hitting any obstacle.
+        returns all the corners of the obstacle boundary in which the coordinate is present. Each corner is such that it can be reached from the coordinate w/o hitting any obstacle.
         """
         x, y = coordinate
 
@@ -378,14 +381,17 @@ class Voronoi:
             if obstacleId in self.neighbouringRegions[i]:
                 candidates.append(i)
 
+        reachable = []
         for c in candidates:
             vertex = self.graph.vertex[c]
             # ensure that vertex coordinate lies within pixel grid
             vertex = (min(vertex[0], self.m-1), min(vertex[1], self.n-1))
             if self.is_path_clear((x, y), vertex):
-                return c
+                reachable.append(c)
 
-        raise Exception("no valid path from src to dest")
+        if len(reachable)==0:
+            raise Exception("no valid path from src to dest")
+        return reachable
 
     def path(self, src, dest):
         """
@@ -399,18 +405,27 @@ class Voronoi:
         if self.margin[src[0]][src[1]][0] == self.margin[dest[0]][dest[1]][0] and self.is_path_clear(src, dest):
             return [src, dest]
 
-        # srcV is a vertex that can be reached from src w/o hitting any obstacle
+        # srcV are vertices that can be reached from src w/o hitting any obstacle
         srcV = self.cornerVertex(src)
 
-        # destV is a vertex that can be reached from dest w/o hitting any obstacle
+        # destV are vertices that can be reached from dest w/o hitting any obstacle
         destV = self.cornerVertex(dest)
 
         # print(f"src = {src}, dest = {dest}")
-        # print(f"srcV = {self.graph.vertex[srcV]}, destV = {self.graph.vertex[destV]}")
+        # print(f"srcV = {[self.graph.vertex[v] for v in srcV]}, destV = {[self.graph.vertex[v] for v in destV]}")
 
         # graphPath = self.graph.path(srcV, destV)
-        graphPath = self.graph.shortest_path(srcV, destV)
-        transformedPath = self.graph.transform(graphPath)
+        shortestPathLength = np.inf
+        shortestPath = None
+        for s in srcV:
+            for d in destV:
+                graphPath, pathLength = self.graph.shortest_path(s, d)
+                tPath = self.graph.transform(graphPath)
+                # print(self.graph.vertex[s], self.graph.vertex[d], pathLength, tPath)
+                if pathLength < shortestPathLength:
+                    shortestPath = graphPath
+                    shortestPathLength = pathLength
+        transformedPath = self.graph.transform(shortestPath)
         # each coordinate of path should be a valid pixel location
         pixelPath = [ (min(x, self.m-1), min(y, self.n-1)) for x, y in transformedPath ]
         # print(graphPath, transformedPath, pixelPath)
@@ -538,7 +553,7 @@ class TestVoronoi(unittest.TestCase):
         numOnes = 10
         grid = generate_random_grid(m, n, numOnes)
         voronoi = Voronoi(grid)
-        voronoi.print_grid()
+        # voronoi.print_grid()
         # voronoi.print_map()
         # voronoi.print_margin()
         # voronoi.print_boundary()
@@ -553,8 +568,10 @@ class TestVoronoi(unittest.TestCase):
         grid = utils.readgrid("grids/2.txt")
         voronoi = Voronoi(grid)
         src, dest = (51, 42), (21, 20)
+        print(f"{src} -> {dest}")
         # [(51, 42), (44, 28), (41, 26), (6, 53), (0, 53), (21, 20)]
         path = voronoi.path(src, dest)
+        print(f"path: {path}")
         voronoi.visualise_path(path)
 
 if __name__ == '__main__':
