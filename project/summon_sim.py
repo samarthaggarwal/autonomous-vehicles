@@ -77,11 +77,11 @@ class Summon(object):
 
         self.cvBridge = CvBridge()
 
-        self.destination = (50.0, -10.0)  # in metric coordinate system with taped start as origin
+        self.destinationTapeCoordinates = (50.0, -10.0)  # in metric coordinate system with taped start as origin
         # convert to image coordinate system
-        self.destinationImageCoordinates = transform_to_image_coordinates(self.destination[0], self.destination[1],
+        self.destinationImageCoordinates = transform_to_image_coordinates(self.destinationTapeCoordinates[0],
+                                                                          self.destinationTapeCoordinates[1],
                                                                           resolution)
-        self.prev_loc = None
 
     def updateObstacleMap(self, data):
         """
@@ -125,12 +125,12 @@ class Summon(object):
         """
         plots path on RVIZ
         """
-        if self.obstacleMap is None or len(path)<2:
+        if self.obstacleMap is None or len(path) < 2:
             return
         color = (0, 255, 0)
-        for i in range(len(path)-1):
-            obstacleMapRGB = cv2.line(obstacleMapRGB, path[i][::-1], path[i+1][::-1], color, 5)
-            obstacleMapRGB = cv2.circle(obstacleMapRGB, path[i+1][::-1], 3, (0, 255, 255), -1)
+        for i in range(len(path) - 1):
+            obstacleMapRGB = cv2.line(obstacleMapRGB, path[i][::-1], path[i + 1][::-1], color, 5)
+            obstacleMapRGB = cv2.circle(obstacleMapRGB, path[i + 1][::-1], 3, (0, 255, 255), -1)
             obstacleMapRGB = cv2.circle(obstacleMapRGB, path[i][::-1], 3, (0, 255, 255), -1)
 
         obstacleMapRGB = cv2.circle(obstacleMapRGB, path[0][::-1], 3, (255, 0, 0), -1)
@@ -145,112 +145,89 @@ class Summon(object):
     def start(self):
         time.sleep(1)
         while not rospy.is_shutdown():
-            # print("loop")
             # startTime = time.time()
-            # get current position and orientation in the world frame
-            curr_x, curr_y, curr_yaw = self.get_gem_pose()
-            print(curr_x, curr_y, curr_yaw)
-            print(self.curr_lat, self.curr_lon)
-            lon_wp_x, lat_wp_y = axy.ll2xy(self.curr_lat, self.curr_lon, self.olat, self.olon)
-
-            srcImage = transform_to_image_coordinates(lon_wp_x, lat_wp_y, resolution)
+            # get current position and orientation in the world frame or simulator frame
+            curr_x_simulator, curr_y_simulator, curr_yaw_simulator = self.get_gem_pose()
+            # get the current position in taped origin coordinate frame
+            curr_x_tape, curr_y_tape = axy.ll2xy(self.curr_lat, self.curr_lon, self.olat, self.olon)
+            currLocationImageCoordinates = transform_to_image_coordinates(curr_x_tape, curr_y_tape, resolution)
 
             while self.obstacleMap is None:
                 self.rate.sleep()
             # beforeVoronoi = time.time()
             # print(f"before Voronoi = {beforeVoronoi - startTime}")
-            # print(f"Obstacle Map Shape - {self.obstacleMap.shape}")
-            # if self.prev_loc is None or self.dist(self.prev_loc, (curr_x, curr_y)) >= 5:
-            if True:
-                voronoi = Voronoi(self.obstacleMap)
-                # afterInit = time.time()
-                # print(f"after Init = {afterInit - beforeVoronoi}")
-                # im = voronoi.plot_regions()
-                # im = cv2.circle(im, srcImage, 3, (255, 0, 0), -1)
-                # im = cv2.circle(im, self.destinationImageCoordinates, 3, (0, 0, 255), -1)
-                #
-                # cv2.imshow("Voronoi Path", im)
-                # cv2.waitKey(0)
-                try:
-                    path = voronoi.path(srcImage[::-1], self.destinationImageCoordinates[::-1])
-                except Exception as e:
-                    print(str(e))
-                    continue
-                # afterPath = time.time()
-                # print(f"after Path = {afterPath - afterInit}")
-                if len(path) == 0:
-                    raise Exception("No path exists")
-                # print(f"path: {path}")
-                self.plot_path(path, voronoi.plot_regions())
-                nextPointImage = path[1]
-                self.prev_loc = (curr_x, curr_y)
+            voronoi = Voronoi(self.obstacleMap)
+            # afterInit = time.time()
+            # print(f"after Init = {afterInit - beforeVoronoi}")
+            try:
+                path = voronoi.path(currLocationImageCoordinates[::-1], self.destinationImageCoordinates[::-1])
+            except Exception as e:
+                print(f"ERROR: {str(e)}")
+                continue
+            # afterPath = time.time()
+            # print(f"after Path = {afterPath - afterInit}")
 
-            print("next point image", nextPointImage)
+            self.plot_path(path, voronoi.plot_regions())
+            nextChasePointImageCoordinates = path[1][::-1]
+            nextChasePointXTape, nextChasePointYTape = transform_to_taped_coordinates(nextChasePointImageCoordinates[0],
+                                                                                      nextChasePointImageCoordinates[1],
+                                                                                      resolution)
+            nextChasePointXSimulator, nextChasePointYSimulator = transform_tape_to_simulator(nextChasePointXTape,
+                                                                                             nextChasePointYTape)
 
-            nextPointRealX, nextPointRealY = transform_to_taped_coordinates(nextPointImage[1], nextPointImage[0], resolution)
-
-            print("next taped - ", nextPointRealX, nextPointRealY)
-
-            nextPointRealX, nextPointRealY = transform_tape_to_simulator(nextPointRealX, nextPointRealY)
-
-            # finding the distance of each way point from the current position
-            L = self.dist((nextPointRealX, nextPointRealY), (curr_x, curr_y))
-            dist_from_dest = self.dist(self.destination, (lon_wp_x, lat_wp_y))
-
-            # finding the distance between the goal point and the vehicle
-            # true look-ahead distance between a waypoint and current position
-
-            # print(f"goal: {self.goal}, L:{L}")
+            distance_from_next_chase_point = self.dist((nextChasePointXSimulator, nextChasePointYSimulator),
+                                                       (curr_x_simulator, curr_y_simulator))
+            distance_from_destination = self.dist(self.destinationTapeCoordinates, (curr_x_tape, curr_y_tape))
 
             # transforming the goal point into the vehicle coordinate frame
-            gvcx = nextPointRealX - curr_x
-            gvcy = nextPointRealY - curr_y
-            goal_x_veh_coord = gvcx * np.cos(curr_yaw) + gvcy * np.sin(curr_yaw)
-            goal_y_veh_coord = gvcy * np.cos(curr_yaw) - gvcx * np.sin(curr_yaw)
+            gvcx = nextChasePointXSimulator - curr_x_simulator
+            gvcy = nextChasePointYSimulator - curr_y_simulator
+            goal_x_veh_coord = gvcx * np.cos(curr_yaw_simulator) + gvcy * np.sin(curr_yaw_simulator)
+            goal_y_veh_coord = gvcy * np.cos(curr_yaw_simulator) - gvcx * np.sin(curr_yaw_simulator)
 
-            orient = np.arctan2(gvcy, gvcx)
+            orientationOfLineConnectingNextChasePoint = np.arctan2(gvcy, gvcx)
 
-            print("Curr Yaw Value: ", curr_yaw * 180.0 / np.pi)
-            print(f"Orientation - {orient*180/np.pi}")
-
-            print(f"curr_x {curr_x}, curr_y {curr_y}, next_simulx {nextPointRealX}, next simul y {nextPointRealY}")
-            # print(f"gvcy: {gvcy}, gvcx: {gvcx}")
-
+            print(f"Curr Yaw Value: {curr_yaw_simulator * 180.0 / np.pi},\n"
+                  f"Orientation of Path: {orientationOfLineConnectingNextChasePoint * 180 / np.pi}\n"
+                  f"Curr Location in Simulator World - {curr_x_simulator, curr_y_simulator}\n"
+                  f"Next Chase Location in Simulator World - {nextChasePointXSimulator, nextChasePointYSimulator}\n")
 
             # find the curvature and the angle
-            # alpha = self.path_points_yaw[self.goal] - (curr_yaw)
-            alpha = orient - curr_yaw
+            alpha = orientationOfLineConnectingNextChasePoint - curr_yaw_simulator
             k = 0.285
-            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / math.sqrt(L))
+            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / math.sqrt(distance_from_next_chase_point))
             angle = angle_i * 2
             # angle = round(np.clip(angle, -0.61, 0.61), 3)
 
-            print("Alpha - ", alpha*180.0/np.pi)
-            print("L: ", L)
+            print(f"Alpha Angle - {alpha * 180.0 / np.pi}\n"
+                  f"Distance from Next Chase Point - {distance_from_next_chase_point}\n"
+                  f"Steering Angle - {angle * 180.0 / np.pi}\n"
+                  f"-------------------------------------")
 
-            print("Steering Angle - ", angle*180.0/np.pi)
-
-            ct_error = round(np.sin(alpha) * L, 3)
-
+            ct_error = round(np.sin(alpha) * distance_from_next_chase_point, 3)
             # print("Crosstrack Error: " + str(ct_error))
 
             # implement constant pure pursuit controller
-            self.ackermann_msg.speed = 2.8
-            if L < 5.0:
-                self.ackermann_msg.speed = 1.0
-            if dist_from_dest < 4.0:
+            if distance_from_destination < 4.0:
                 self.ackermann_msg.speed = 0.0
-            self.ackermann_msg.steering_angle = angle
-            self.ackermann_pub.publish(self.ackermann_msg)
-
-            if dist_from_dest < 4.0:
+                self.ackermann_msg.steering_angle = angle
+                self.ackermann_pub.publish(self.ackermann_msg)
                 print("Destination Reached!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 break
+
+            if distance_from_next_chase_point < 5.0:
+                self.ackermann_msg.speed = 1.0
+            else:
+                self.ackermann_msg.speed = 2.8
+
+            self.ackermann_msg.steering_angle = angle
+            self.ackermann_pub.publish(self.ackermann_msg)
 
             # endTime = time.time()
             # print(f"end = {endTime - afterPath}")
 
             self.rate.sleep()
+
 
 def summon():
     rospy.init_node('summon_sim_node', anonymous=True)
