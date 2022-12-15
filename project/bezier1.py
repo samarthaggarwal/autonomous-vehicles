@@ -34,20 +34,21 @@ def bezier_curve(points, nTimes=1000):
 
     xvals = np.dot(xPoints, polynomial_array)
     yvals = np.dot(yPoints, polynomial_array)
+    xvals = [int(x) for x in xvals]
+    yvals = [int(y) for y in yvals]
+    return np.array([xvals, yvals]).transpose()
 
-    return xvals, yvals
 
 if __name__ == "__main__":
     from matplotlib import pyplot as plt
 
     nPoints = 3
-#     points = np.random.rand(nPoints,2)*200
+    #     points = np.random.rand(nPoints,2)*200
     xpoints = [0, 50, 100, 150]
     ypoints = [0, 200, 0, 200]
 
-    xvals, yvals = bezier_curve(np.array([xpoints, ypoints]).transpose(), nTimes=1000)
-    print(len(xvals), len(yvals))
-    plt.plot(xvals, yvals)
+    bezier_points = bezier_curve(np.array([xpoints, ypoints]).transpose(), nTimes=1000)
+    plt.plot(bezier_points[:, 0], bezier_points[:, 1])
     plt.plot(xpoints, ypoints, "ro")
     for nr in range(len(xpoints)):
         plt.text(xpoints[nr], ypoints[nr], nr)

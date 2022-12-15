@@ -22,7 +22,7 @@ def bezier_curve(points, nTimes=1000):
     s_vals = np.linspace(0.0, 1.0, nTimes)
     ans = curve.evaluate_multi(s_vals)
 
-    return ans[0], ans[1]
+    return ans.transpose().astype(int)
 
 
 if __name__ == "__main__":
@@ -30,9 +30,8 @@ if __name__ == "__main__":
     xpoints = [0, 50, 100, 150]
     ypoints = [0, 200, 0, 200]
 
-    xvals, yvals = bezier_curve(np.array([xpoints, ypoints]).transpose(), nTimes=1000)
-    print(len(xvals), len(yvals))
-    plt.plot(xvals, yvals)
+    bezier_points = bezier_curve(np.array([xpoints, ypoints]).transpose(), nTimes=1000)
+    plt.plot(bezier_points[:, 0], bezier_points[:, 1])
     plt.plot(xpoints, ypoints, "ro")
     for nr in range(len(xpoints)):
         plt.text(xpoints[nr], ypoints[nr], nr)
