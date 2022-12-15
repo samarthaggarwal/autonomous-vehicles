@@ -40,6 +40,16 @@ from lidar.util import transform_to_image_coordinates, transform_to_taped_coordi
 from lidar.config import resolution
 import cv2
 
+def transform_points_from_image_to_tape(points, resolution):
+    path = []
+    for pathInd in range(len(points)):
+        nextChasePointXTape, nextChasePointYTape = transform_to_taped_coordinates(points[pathInd][1],
+                                                                                  points[pathInd][0],
+                                                                                  resolution)
+        path.append([nextChasePointXTape, nextChasePointYTape])
+    path = np.array(path)
+    return path
+
 class PID(object):
 
     def __init__(self, kp, ki, kd, wg=None):
@@ -110,6 +120,7 @@ class PurePursuit(object):
         self.rate       = rospy.Rate(10)
 
         self.look_ahead = 4
+        self.far_look_ahead = 10  # meters
         self.wheelbase  = 1.75 # meters
         self.offset     = 0.46 # meters
 
@@ -184,9 +195,9 @@ class PurePursuit(object):
 
         self.cvBridge = CvBridge()
 
-        self.destination = (50.0, -10.0)  # in metric coordinate system with taped start as origin
+        self.destinationTapeCoordinates = (50.0, -10.0)  # in metric coordinate system with taped start as origin
         # convert to image coordinate system
-        self.destinationImageCoordinates = transform_to_image_coordinates(self.destination[0], self.destination[1],
+        self.destinationImageCoordinates = transform_to_image_coordinates(self.destinationTapeCoordinates[0], self.destinationTapeCoordinates[1],
                                                                           resolution)
 
     def plot_path(self, path, obstacleMapRGB):
@@ -261,22 +272,6 @@ class PurePursuit(object):
             steer_angle = 0.0
 
         return steer_angle
-
-    def read_waypoints(self):
-
-        # read recorded GPS lat, lon, heading
-        dirname  = os.path.dirname(__file__)
-        filename = os.path.join(dirname, '../waypoints/xy_demo.csv')
-
-        with open(filename) as f:
-            path_points = [tuple(line) for line in csv.reader(f)]
-
-        # x towards East and y towards North
-        self.path_points_lon_x   = [float(point[0]) for point in path_points] # longitude
-        self.path_points_lat_y   = [float(point[1]) for point in path_points] # latitude
-        self.path_points_heading = [float(point[2]) for point in path_points] # heading
-        self.wp_size             = len(self.path_points_lon_x)
-        self.dist_arr            = np.zeros(self.wp_size)
 
     def wps_to_local_xy(self, lon_wp, lat_wp):
         # convert GNSS waypoints into local fixed frame reprented in x and y
@@ -354,7 +349,7 @@ class PurePursuit(object):
 
             curr_x, curr_y, curr_yaw = self.get_gem_state()
 
-            srcImage = transform_to_image_coordinates(curr_x, curr_y, resolution)
+            currLocationImageCoordinates = transform_to_image_coordinates(curr_x, curr_y, resolution)
 
             while self.obstacleMap is None:
                 self.rate.sleep()
@@ -366,92 +361,147 @@ class PurePursuit(object):
             # afterInit = time.time()
             # print(f"after Init = {afterInit - beforeVoronoi}")
             try:
-                path = voronoi.path(srcImage[::-1], self.destinationImageCoordinates[::-1])
+                path = voronoi.path(currLocationImageCoordinates[::-1], self.destinationImageCoordinates[::-1])
+                bezierPathImageCoordinates = bezier_curve(np.array(path), 1000, voronoi, resolution)
+                self.plot_path(bezierPathImageCoordinates, voronoi.plot_regions())
+                bezierPathTapeCoordinates = transform_points_from_image_to_tape(bezierPathImageCoordinates,
+                                                                                          resolution)
             except Exception as e:
-                print(f"src = {srcImage} destination = {self.destinationImageCoordinates}")
+                print(f"src = {currLocationImageCoordinates} destination = {self.destinationImageCoordinates}")
                 print(str(e))
                 continue
             # afterPath = time.time()
             # print(f"after Path = {afterPath - afterInit}")
             print(f"path: {path}")
             # voronoi.visualise_path(path)
-            self.plot_path(path, voronoi.plot_regions())
 
-            # # finding the distance of each way point from the current position
-            # for i in range(len(self.path_points_x)):
-            #     self.dist_arr[i] = self.dist((self.path_points_x[i], self.path_points_y[i]), (curr_x, curr_y))
-            #
-            # # finding those points which are less than the look ahead distance (will be behind and ahead of the vehicle)
-            # goal_arr = np.where( (self.dist_arr < self.look_ahead + 0.3) & (self.dist_arr > self.look_ahead - 0.3) )[0]
-            #
-            # # finding the goal point which is the last in the set of points less than the lookahead distance
-            # for idx in goal_arr:
-            #     v1 = [self.path_points_x[idx]-curr_x , self.path_points_y[idx]-curr_y]
-            #     v2 = [np.cos(curr_yaw), np.sin(curr_yaw)]
-            #     temp_angle = self.find_angle(v1,v2)
-            #     # find correct look-ahead point by using heading information
-            #     if abs(temp_angle) < np.pi/2:
-            #         self.goal = idx
-            #         break
-            #
-            # # finding the distance between the goal point and the vehicle
-            # # true look-ahead distance between a waypoint and current position
-            # L = self.dist_arr[self.goal]
-            #
-            # # find the curvature and the angle
-            # alpha = self.heading_to_yaw(self.path_points_heading[self.goal]) - curr_yaw
-            #
-            # # ----------------- tuning this part as needed -----------------
-            # k       = 0.41
-            # angle_i = math.atan((k * 2 * self.wheelbase * math.sin(alpha)) / L)
-            # angle   = angle_i*2
-            # # ----------------- tuning this part as needed -----------------
-            #
-            # f_delta = round(np.clip(angle, -0.61, 0.61), 3)
-            #
-            # f_delta_deg = np.degrees(f_delta)
-            #
-            # # steering_angle in degrees
-            # steering_angle = self.front2steer(f_delta_deg)
-            #
-            # if(self.gem_enable == True):
-            #     print("Current index: " + str(self.goal))
-            #     print("Forward velocity: " + str(self.speed))
-            #     ct_error = round(np.sin(alpha) * L, 3)
-            #     print("Crosstrack Error: " + str(ct_error))
-            #     print("Front steering angle: " + str(np.degrees(f_delta)) + " degrees")
-            #     print("Steering wheel angle: " + str(steering_angle) + " degrees" )
-            #     print("\n")
-            #
-            # # if (self.goal >= 625 and self.goal <= 940):
-            # #     self.desired_speed = 1.5
-            # # else:
-            # #     self.desired_speed = 0.7
-            #
-            # current_time = rospy.get_time()
-            # filt_vel     = self.speed_filter.get_data(self.speed)
-            # output_accel = self.pid_speed.get_control(current_time, self.desired_speed - filt_vel)
-            #
-            # if output_accel > self.max_accel:
-            #     output_accel = self.max_accel
-            #
-            # if output_accel < 0.3:
-            #     output_accel = 0.3
-            #
-            # if (f_delta_deg <= 30 and f_delta_deg >= -30):
-            #     self.turn_cmd.ui16_cmd = 1
-            # elif(f_delta_deg > 30):
-            #     self.turn_cmd.ui16_cmd = 2 # turn left
-            # else:
-            #     self.turn_cmd.ui16_cmd = 0 # turn right
-            #
-            #
-            #
-            # self.accel_cmd.f64_cmd = output_accel
-            # self.steer_cmd.angular_position = np.radians(steering_angle)
-            # self.accel_pub.publish(self.accel_cmd)
-            # self.steer_pub.publish(self.steer_cmd)
-            # self.turn_pub.publish(self.turn_cmd)
+            dist_arr = []
+
+            # finding the distance of each way point from the current position
+            for i in range(len(bezierPathTapeCoordinates)):
+                dist_arr.append(self.dist((bezierPathTapeCoordinates[i][0], bezierPathTapeCoordinates[i][1]),
+                                          (curr_x, curr_y)))
+
+            """ Find nearest goal point in each iteration """
+            goal = 0
+            # print(f"length of dist_arr: {len(dist_arr)} | dist[goal]: {dist_arr[goal]} | self.look_ahead: {self.look_ahead} | look ahead check: {dist_arr[goal] < self.look_ahead - 0.3}")
+            while goal < len(dist_arr) and dist_arr[goal] < self.look_ahead - 0.3:
+                goal += 1
+            far_ahead_point = goal
+            while far_ahead_point < len(dist_arr) and dist_arr[far_ahead_point] < self.far_look_ahead - 0.3:
+                far_ahead_point += 1
+
+            # finding the distance between the goal point and the vehicle
+            # true look-ahead distance between a waypoint and current position
+            goal = min(goal, len(dist_arr) - 1)
+            far_ahead_point = min(far_ahead_point, len(dist_arr) - 1)
+            distance_from_next_chase_point = dist_arr[goal]
+
+            print(f"goal: {self.goal}, distance_from_next_chase_point:{distance_from_next_chase_point}")
+
+            distance_from_destination = self.dist(self.destinationTapeCoordinates, (curr_x, curr_y))
+            
+            def orientation_ray_from_vehicle(point):
+                nextChasePointXTape, nextChasePointYTape = bezierPathTapeCoordinates[point][0],bezierPathTapeCoordinates[point][1]
+
+                # transforming the goal point into the vehicle coordinate frame
+                gvcx = nextChasePointXTape - curr_x
+                gvcy = nextChasePointYTape - curr_y
+                orientation = np.arctan2(gvcy, gvcx)
+                return orientation
+            
+            orientationOfLineConnectingNextChasePoint = orientation_ray_from_vehicle(goal)
+            orientationOfLineConnectingFarLookAheadPoint = orientation_ray_from_vehicle(far_ahead_point)
+
+
+            """
+            # finding the distance of each way point from the current position
+            for i in range(len(self.path_points_x)):
+                self.dist_arr[i] = self.dist((self.path_points_x[i], self.path_points_y[i]), (curr_x, curr_y))
+            
+            # finding those points which are less than the look ahead distance (will be behind and ahead of the vehicle)
+            goal_arr = np.where( (self.dist_arr < self.look_ahead + 0.3) & (self.dist_arr > self.look_ahead - 0.3) )[0]
+            
+            # finding the goal point which is the last in the set of points less than the lookahead distance
+            for idx in goal_arr:
+                v1 = [self.path_points_x[idx]-curr_x , self.path_points_y[idx]-curr_y]
+                v2 = [np.cos(curr_yaw), np.sin(curr_yaw)]
+                temp_angle = self.find_angle(v1,v2)
+                # find correct look-ahead point by using heading information
+                if abs(temp_angle) < np.pi/2:
+                    self.goal = idx
+                    break
+            
+            # finding the distance between the goal point and the vehicle
+            # true look-ahead distance between a waypoint and current position
+            L = self.dist_arr[self.goal]
+            """
+            
+            # find the curvature and the angle
+            alpha = orientationOfLineConnectingNextChasePoint - curr_yaw
+            alpha_far = orientationOfLineConnectingFarLookAheadPoint - curr_yaw
+            
+            # ----------------- tuning this part as needed -----------------
+            k       = 0.41
+            angle_i = math.atan((k * 2 * self.wheelbase * math.sin(alpha)) / L)
+            angle   = angle_i*2
+            # ----------------- tuning this part as needed -----------------
+            
+            f_delta = round(np.clip(angle, -0.61, 0.61), 3)
+            
+            f_delta_deg = np.degrees(f_delta)
+            
+            # steering_angle in degrees
+            steering_angle = self.front2steer(f_delta_deg)
+            
+            if(self.gem_enable == True):
+                print("Current index: " + str(self.goal))
+                print("Forward velocity: " + str(self.speed))
+                ct_error = round(np.sin(alpha) * L, 3)
+                print("Crosstrack Error: " + str(ct_error))
+                print("Front steering angle: " + str(np.degrees(f_delta)) + " degrees")
+                print("Steering wheel angle: " + str(steering_angle) + " degrees" )
+                print("\n")
+            
+            # implement constant pure pursuit controller
+            if distance_from_destination < 4.0:
+                self.brake_cmd.f64_cmd = 1.0
+                self.brake_pub.publish(self.brake_cmd)
+                print("Destination Reached!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                break
+
+            angularThreshold = np.pi / 18
+            if np.abs(alpha) > angularThreshold or np.abs(alpha_far) > angularThreshold:
+                desired_speed = self.desired_speed / 2
+            # elif distance_from_next_chase_point < 5.0:
+            #     desired_speed = 2.8
+            else:
+                desired_speed = self.desired_speed
+            
+            current_time = rospy.get_time()
+            filt_vel     = self.speed_filter.get_data(self.speed)
+            output_accel = self.pid_speed.get_control(current_time, desired_speed - filt_vel)
+            
+            if output_accel > self.max_accel:
+                output_accel = self.max_accel
+            
+            if output_accel < 0.3:
+                output_accel = 0.3
+            
+            if (f_delta_deg <= 30 and f_delta_deg >= -30):
+                self.turn_cmd.ui16_cmd = 1
+            elif(f_delta_deg > 30):
+                self.turn_cmd.ui16_cmd = 2 # turn left
+            else:
+                self.turn_cmd.ui16_cmd = 0 # turn right
+            
+            
+            
+            self.accel_cmd.f64_cmd = output_accel
+            self.steer_cmd.angular_position = np.radians(steering_angle)
+            self.accel_pub.publish(self.accel_cmd)
+            self.steer_pub.publish(self.steer_cmd)
+            self.turn_pub.publish(self.turn_cmd)
 
             self.rate.sleep()
 
