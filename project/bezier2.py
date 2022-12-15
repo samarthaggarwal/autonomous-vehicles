@@ -19,7 +19,7 @@ def get_bezier(points, nTimes=1000):
     return np.array(deduplicatedPath)
 
 
-def bezier_curve(points, nTimes, voronoi, resolution):
+def bezier_curve(points, nTimes, voronoi, resolution, distance_from_obstacle = 2.0):
     """
        Given a set of control points, return the
        bezier curve defined by the control points.
@@ -33,7 +33,7 @@ def bezier_curve(points, nTimes, voronoi, resolution):
         See http://processingjs.nihongoresources.com/bezierinfo/
     """
     ans = get_bezier(points, nTimes)
-    distance = int(1.5 / resolution)
+    distance = int(distance_from_obstacle / resolution)
     count = 2
     # print(f"original points: {points}")
     while not voronoi.are_waypoints_clear(ans, distance):
