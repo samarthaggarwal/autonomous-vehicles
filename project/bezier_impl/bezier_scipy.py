@@ -10,7 +10,7 @@ def bernstein_poly(i, n, t):
     return comb(n, i) * (t ** (n - i)) * (1 - t) ** i
 
 
-def bezier_curve(points, nTimes=1000):
+def get_bezier(points, nTimes=1000):
     """
        Given a set of control points, return the
        bezier curve defined by the control points.
@@ -36,21 +36,12 @@ def bezier_curve(points, nTimes=1000):
     yvals = np.dot(yPoints, polynomial_array)
     xvals = [int(x) for x in xvals]
     yvals = [int(y) for y in yvals]
-    return np.array([xvals, yvals]).transpose()
 
-
-if __name__ == "__main__":
-    from matplotlib import pyplot as plt
-
-    nPoints = 3
-    #     points = np.random.rand(nPoints,2)*200
-    xpoints = [0, 50, 100, 150]
-    ypoints = [0, 200, 0, 200]
-
-    bezier_points = bezier_curve(np.array([xpoints, ypoints]).transpose(), nTimes=1000)
-    plt.plot(bezier_points[:, 0], bezier_points[:, 1])
-    plt.plot(xpoints, ypoints, "ro")
-    for nr in range(len(xpoints)):
-        plt.text(xpoints[nr], ypoints[nr], nr)
-
-    plt.show()
+    deduplicatedPath = []
+    prevPoint = None
+    for i in range(len(xvals)):
+        if prevPoint is None or prevPoint[0] != xvals[i] or prevPoint[1] != yvals[i]:
+            deduplicatedPath.append([xvals[i], yvals[i]])
+            prevPoint = [xvals[i], yvals[i]]
+    # print(f"length: {len(ans)} -> {len(deduplicatedPath)}")
+    return np.array(deduplicatedPath)

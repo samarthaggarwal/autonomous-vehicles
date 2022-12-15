@@ -1,25 +1,10 @@
-import bezier
 import numpy as np
 import matplotlib.pyplot as plt
+# from bezier_impl.bezier_scipy import get_bezier
+from bezier_impl.bezier_package import get_bezier
 
 
-def get_bezier(points, nTimes=1000):
-    nodes = np.asfortranarray([points.transpose()[0], points.transpose()[1], ])
-    # print(f"Nodes: {nodes} | len: {len(nodes[0])} ")
-    curve = bezier.Curve(nodes, degree=len(points) - 1)
-    s_vals = np.linspace(0.0, 1.0, nTimes)
-    ans = curve.evaluate_multi(s_vals).transpose().astype(int)
-    deduplicatedPath = []
-    prevPoint = None
-    for i, point in enumerate(ans):
-        if prevPoint is None or prevPoint[0]!=point[0] or prevPoint[1]!=point[1]:
-            deduplicatedPath.append(point)
-            prevPoint = point
-    # print(f"length: {len(ans)} -> {len(deduplicatedPath)}")
-    return np.array(deduplicatedPath)
-
-
-def bezier_curve(points, nTimes, voronoi, resolution, distance_from_obstacle = 2.0):
+def bezier_curve(points, nTimes, voronoi, resolution, distance_from_obstacle=2.0):
     """
        Given a set of control points, return the
        bezier curve defined by the control points.
@@ -41,13 +26,12 @@ def bezier_curve(points, nTimes, voronoi, resolution, distance_from_obstacle = 2
         for p in points:
             for c in range(count):
                 npoints.append(p)
-        if len(npoints) > 900: # bezier can't fit curve on >1000 points
+        if len(npoints) > 900:  # bezier can't fit curve on >1000 points
             break
         ans = get_bezier(np.array(npoints), nTimes)
         count += 1
     # print("final count: {count}")
     return ans
-
 
 if __name__ == "__main__":
     #     points = np.random.rand(nPoints,2)*200
@@ -63,7 +47,7 @@ if __name__ == "__main__":
                         [ 59, 220],
                         [ 73, 277],
                         [ 76, 281],
-                        [100, 350]] 
+                        [100, 350]]
                     )
     xpoints, ypoints = points[:, 0], points[:, 1]
 
