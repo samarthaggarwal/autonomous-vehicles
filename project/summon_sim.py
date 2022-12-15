@@ -226,7 +226,7 @@ class Summon(object):
             # find the curvature and the angle
             alpha = orientationOfLineConnectingNextChasePoint - curr_yaw_simulator
             k = 0.285
-            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / distance_from_next_chase_point)
+            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / np.sqrt(distance_from_next_chase_point))
             angle = angle_i * 2
             angle = round(np.clip(angle, -0.61, 0.61), 3)
 
