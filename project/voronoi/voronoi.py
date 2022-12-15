@@ -141,7 +141,7 @@ class Voronoi:
                     # mark open spaces with color
                     img[i][j] = colors[self.margin[i][j][0] - 1]
 
-        cv2.imwrite("regions.png", img)
+        # cv2.imwrite("regions.png", img)
         return img
 
     def visualise_path(self, path):
