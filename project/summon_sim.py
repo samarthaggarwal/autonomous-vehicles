@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 # Python Headers
-import os
-import csv
 import math
 import time
 import cv2
@@ -13,10 +11,8 @@ from numpy import linalg as la
 # ROS Headers
 import rospy
 from ackermann_msgs.msg import AckermannDrive
-from geometry_msgs.msg import Twist, Vector3
-from geometry_msgs.msg import PoseStamped
-from sensor_msgs.msg import LaserScan, NavSatFix, Image
-from tf.transformations import euler_from_quaternion, quaternion_from_euler
+from sensor_msgs.msg import NavSatFix, Image
+from tf.transformations import euler_from_quaternion
 
 # Gazebo Headers
 from gazebo_msgs.srv import GetModelState
@@ -25,10 +21,9 @@ import alvinxy.alvinxy as axy
 
 from voronoi.voronoi import Voronoi
 from cv_bridge import CvBridge
-import numpy as np
 from lidar.util import *
 from lidar.config import resolution
-from bezier2 import bezier_curve
+from smoothpath import bezier_curve
 
 
 def heading_to_yaw(heading_curr):
