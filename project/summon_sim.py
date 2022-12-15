@@ -28,6 +28,7 @@ from cv_bridge import CvBridge
 import numpy as np
 from lidar.util import *
 from lidar.config import resolution
+from bezier2 import bezier_curve
 
 
 def heading_to_yaw(heading_curr):
@@ -46,11 +47,24 @@ def heading_to_yaw(heading_curr):
     return yaw_curr
 
 
+def transform_points_from_image_to_simulator(points, resolution):
+    path = []
+    for pathInd in range(len(points)):
+        nextChasePointXTape, nextChasePointYTape = transform_to_taped_coordinates(points[pathInd][1],
+                                                                                  points[pathInd][0],
+                                                                                  resolution)
+        nextChasePointXSimulator, nextChasePointYSimulator = transform_tape_to_simulator(
+            nextChasePointXTape, nextChasePointYTape)
+        path.append([nextChasePointXSimulator, nextChasePointYSimulator])
+    path = np.array(path)
+    return path
+
+
 class Summon(object):
 
     def __init__(self):
 
-        self.rate = rospy.Rate(100)
+        self.rate = rospy.Rate(0.5)
 
         self.look_ahead = 6  # meters
         self.wheelbase = 1.75  # meters
@@ -161,29 +175,38 @@ class Summon(object):
             # print(f"after Init = {afterInit - beforeVoronoi}")
             try:
                 path = voronoi.path(currLocationImageCoordinates[::-1], self.destinationImageCoordinates[::-1])
+                bezierPathImageCoordinates = bezier_curve(np.array(path), nTimes=1000)
+                self.plot_path(bezierPathImageCoordinates, voronoi.plot_regions())
+                bezierPathSimulatorCoordinates = transform_points_from_image_to_simulator(bezierPathImageCoordinates,
+                                                                                          resolution)
             except Exception as e:
                 print(f"ERROR: {str(e)}")
                 continue
             # afterPath = time.time()
             # print(f"after Path = {afterPath - afterInit}")
 
-            self.plot_path(path, voronoi.plot_regions())
-            nextChasePointImageCoordinates = path[1][::-1]
-            nextChasePointXTape, nextChasePointYTape = transform_to_taped_coordinates(nextChasePointImageCoordinates[0],
-                                                                                      nextChasePointImageCoordinates[1],
-                                                                                      resolution)
-            nextChasePointXSimulator, nextChasePointYSimulator = transform_tape_to_simulator(nextChasePointXTape,
-                                                                                             nextChasePointYTape)
+            dist_arr = []
 
-            distance_from_next_chase_point = self.dist((nextChasePointXSimulator, nextChasePointYSimulator),
-                                                       (curr_x_simulator, curr_y_simulator))
+            # finding the distance of each way point from the current position
+            for i in range(len(bezierPathSimulatorCoordinates)):
+                dist_arr.append(self.dist((bezierPathSimulatorCoordinates[i][0], bezierPathSimulatorCoordinates[i][1]),
+                                          (curr_x_simulator, curr_y_simulator)))
 
-            if distance_from_next_chase_point > self.look_ahead:
-                t = self.look_ahead / distance_from_next_chase_point
-                nextChasePointXSimulator = (1.0 - t) * curr_x_simulator + t * nextChasePointXSimulator
-                nextChasePointYSimulator = (1.0 - t) * curr_y_simulator + t * nextChasePointYSimulator
-                distance_from_next_chase_point = self.dist((nextChasePointXSimulator, nextChasePointYSimulator),
-                                                           (curr_x_simulator, curr_y_simulator))
+            """ Find nearest goal point in each iteration """
+            goal = 0
+            while goal < len(dist_arr) and dist_arr[goal] < self.look_ahead - 0.3:
+                goal += 1
+
+            # finding the distance between the goal point and the vehicle
+            # true look-ahead distance between a waypoint and current position
+            goal = min(goal, len(dist_arr) - 1)
+            L = dist_arr[goal]
+
+            print(f"goal: {self.goal}, L:{L}")
+
+            nextChasePointXSimulator, nextChasePointYSimulator = bezierPathSimulatorCoordinates[goal][0], bezierPathSimulatorCoordinates[goal][1]
+
+            distance_from_next_chase_point = L
 
             distance_from_destination = self.dist(self.destinationTapeCoordinates, (curr_x_tape, curr_y_tape))
 
@@ -224,7 +247,7 @@ class Summon(object):
                 break
 
             if distance_from_next_chase_point < 5.0:
-                self.ackermann_msg.speed = 1.0
+                self.ackermann_msg.speed = 2.8
             else:
                 self.ackermann_msg.speed = 2.8
 
