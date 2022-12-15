@@ -367,6 +367,19 @@ class Voronoi:
                 return False
         return True
 
+    def are_waypoints_clear(self, points, distanceFromObstacle=1):
+        """
+        returns True iff there is no obstacle is closer than distanceThreshold from any point
+        note: return True conservatively, in case of doubt return False since there are multiple candidates
+        assumption: all points are valid coordinates
+        """
+        # print(f"points: {points}")
+        for x,y in points:
+            x, y = min(x, self.m-1), min(y, self.n-1)
+            if distance(self.margin[x][y][1], self.margin[x][y][2]) < distanceFromObstacle:
+                return False
+        return True
+
     def cornerVertex(self, coordinate):
         """
         returns all the corners of the obstacle boundary in which the coordinate is present. Each corner is such that it can be reached from the coordinate w/o hitting any obstacle.
