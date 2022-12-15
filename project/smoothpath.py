@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-# from bezier_impl.bezier_scipy import get_bezier
-from bezier_impl.bezier_package import get_bezier
+from bezier_impl.bezier_scipy import get_bezier
+# from bezier_impl.bezier_package import get_bezier
 
 
 def bezier_curve(points, nTimes, voronoi, resolution, distance_from_obstacle=2.0):
