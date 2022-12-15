@@ -67,6 +67,7 @@ class Summon(object):
         self.rate = rospy.Rate(0.5)
 
         self.look_ahead = 2  # meters
+        self.far_look_ahead = 5  # meters
         self.wheelbase = 1.75  # meters
         self.goal = 0
 
@@ -200,40 +201,46 @@ class Summon(object):
 
             """ Find nearest goal point in each iteration """
             goal = 0
-            print(f"length of dist_arr: {len(dist_arr)} | dist[goal]: {dist_arr[goal]} | self.look_ahead: {self.look_ahead} | look ahead check: {dist_arr[goal] < self.look_ahead - 0.3}")
+            # print(f"length of dist_arr: {len(dist_arr)} | dist[goal]: {dist_arr[goal]} | self.look_ahead: {self.look_ahead} | look ahead check: {dist_arr[goal] < self.look_ahead - 0.3}")
             while goal < len(dist_arr) and dist_arr[goal] < self.look_ahead - 0.3:
                 goal += 1
+            far_ahead_point = goal
+            while far_ahead_point < len(dist_arr) and dist_arr[far_ahead_point] < self.far_look_ahead - 0.3:
+                far_ahead_point += 1
 
             # finding the distance between the goal point and the vehicle
             # true look-ahead distance between a waypoint and current position
             goal = min(goal, len(dist_arr) - 1)
-            L = dist_arr[goal]
+            far_ahead_point = min(far_ahead_point, len(dist_arr) - 1)
+            distance_from_next_chase_point = dist_arr[goal]
 
-            print(f"goal: {self.goal}, L:{L}")
-
-            nextChasePointXSimulator, nextChasePointYSimulator = bezierPathSimulatorCoordinates[goal][0], bezierPathSimulatorCoordinates[goal][1]
-
-            distance_from_next_chase_point = L
+            print(f"goal: {self.goal}, distance_from_next_chase_point:{distance_from_next_chase_point}")
 
             distance_from_destination = self.dist(self.destinationTapeCoordinates, (curr_x_tape, curr_y_tape))
+            
+            def orientation_ray_from_vehicle(point):
+                nextChasePointXSimulator, nextChasePointYSimulator = bezierPathSimulatorCoordinates[point][0],bezierPathSimulatorCoordinates[point][1]
 
-            # transforming the goal point into the vehicle coordinate frame
-            gvcx = nextChasePointXSimulator - curr_x_simulator
-            gvcy = nextChasePointYSimulator - curr_y_simulator
-            goal_x_veh_coord = gvcx * np.cos(curr_yaw_simulator) + gvcy * np.sin(curr_yaw_simulator)
-            goal_y_veh_coord = gvcy * np.cos(curr_yaw_simulator) - gvcx * np.sin(curr_yaw_simulator)
-
-            orientationOfLineConnectingNextChasePoint = np.arctan2(gvcy, gvcx)
+                # transforming the goal point into the vehicle coordinate frame
+                gvcx = nextChasePointXSimulator - curr_x_simulator
+                gvcy = nextChasePointYSimulator - curr_y_simulator
+                # goal_x_veh_coord = gvcx * np.cos(curr_yaw_simulator) + gvcy * np.sin(curr_yaw_simulator)
+                # goal_y_veh_coord = gvcy * np.cos(curr_yaw_simulator) - gvcx * np.sin(curr_yaw_simulator)
+                orientation = np.arctan2(gvcy, gvcx)
+                return orientation
+            
+            orientationOfLineConnectingNextChasePoint = orientation_ray_from_vehicle(goal)
+            orientationOfLineConnectingFarLookAheadPoint = orientation_ray_from_vehicle(far_ahead_point)
 
             print(f"Curr Yaw Value: {curr_yaw_simulator * 180.0 / np.pi},\n"
                   f"Orientation of Path: {orientationOfLineConnectingNextChasePoint * 180 / np.pi}\n"
                   f"Curr Location in Image World - {currLocationImageCoordinates[0], currLocationImageCoordinates[1]}\n"
                   f"Curr Location in Simulator World - {curr_x_simulator, curr_y_simulator}\n"
-                  f"Next Chase Location in Image World - {bezierPathImageCoordinates[goal][0], bezierPathImageCoordinates[goal][1]}\n"
-                  f"Next Chase Location in Simulator World - {nextChasePointXSimulator, nextChasePointYSimulator}\n")
+                  f"Next Chase Location in Image World - {bezierPathImageCoordinates[goal][0], bezierPathImageCoordinates[goal][1]}\n")
 
             # find the curvature and the angle
             alpha = orientationOfLineConnectingNextChasePoint - curr_yaw_simulator
+            alpha_far = orientationOfLineConnectingFarLookAheadPoint - curr_yaw_simulator
             k = 0.285
             angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / distance_from_next_chase_point)
             # angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / np.sqrt(distance_from_next_chase_point))
@@ -256,13 +263,13 @@ class Summon(object):
                 print("Destination Reached!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 break
 
-            # angularThreshold = np.pi/6
-            # if np.abs(alpha) > angularThreshold:
-            #     self.ackermann_msg.speed = 1.0
+            angularThreshold = np.pi/18
+            if np.abs(alpha) > angularThreshold or np.abs(alpha_far) > angularThreshold:
+                self.ackermann_msg.speed = 1.0
             # elif distance_from_next_chase_point < 5.0:
             #     self.ackermann_msg.speed = 2.8
-            # else:
-            self.ackermann_msg.speed = 2.8
+            else:
+                self.ackermann_msg.speed = 2.8
 
             self.ackermann_msg.steering_angle = angle
             self.ackermann_pub.publish(self.ackermann_msg)

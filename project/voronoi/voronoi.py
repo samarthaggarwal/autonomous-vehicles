@@ -360,7 +360,7 @@ class Voronoi:
         """
         points = interpolate(src, dest)
         # print(f"points: {points}")
-        distanceThreshold = 1 # minimum allowed distance from obstacle
+        distanceThreshold = 3 # minimum allowed distance from obstacle
         for x,y in points:
             x, y = min(x, self.m-1), min(y, self.n-1)
             if distance(self.margin[x][y][1], self.margin[x][y][2]) < distanceThreshold:
