@@ -177,6 +177,14 @@ class Summon(object):
 
             distance_from_next_chase_point = self.dist((nextChasePointXSimulator, nextChasePointYSimulator),
                                                        (curr_x_simulator, curr_y_simulator))
+
+            if distance_from_next_chase_point > self.look_ahead:
+                t = self.look_ahead / distance_from_next_chase_point
+                nextChasePointXSimulator = (1.0 - t) * curr_x_simulator + t * nextChasePointXSimulator
+                nextChasePointYSimulator = (1.0 - t) * curr_y_simulator + t * nextChasePointYSimulator
+                distance_from_next_chase_point = self.dist((nextChasePointXSimulator, nextChasePointYSimulator),
+                                                           (curr_x_simulator, curr_y_simulator))
+
             distance_from_destination = self.dist(self.destinationTapeCoordinates, (curr_x_tape, curr_y_tape))
 
             # transforming the goal point into the vehicle coordinate frame
@@ -195,9 +203,9 @@ class Summon(object):
             # find the curvature and the angle
             alpha = orientationOfLineConnectingNextChasePoint - curr_yaw_simulator
             k = 0.285
-            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / math.sqrt(distance_from_next_chase_point))
+            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / distance_from_next_chase_point)
             angle = angle_i * 2
-            # angle = round(np.clip(angle, -0.61, 0.61), 3)
+            angle = round(np.clip(angle, -0.61, 0.61), 3)
 
             print(f"Alpha Angle - {alpha * 180.0 / np.pi}\n"
                   f"Distance from Next Chase Point - {distance_from_next_chase_point}\n"
