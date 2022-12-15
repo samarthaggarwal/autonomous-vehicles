@@ -376,6 +376,7 @@ class Voronoi:
         # print(f"points: {points}")
         for x,y in points:
             x, y = min(x, self.m-1), min(y, self.n-1)
+            # print(f"x:{x}, y:{y}")
             if distance(self.margin[x][y][1], self.margin[x][y][2]) < distanceFromObstacle:
                 return False
         return True

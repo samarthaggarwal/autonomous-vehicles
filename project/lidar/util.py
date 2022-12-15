@@ -32,14 +32,16 @@ def transform_to_taped_coordinates(x_img, y_img, resolution):
     return x_points, -1 * y_points
 
 
-def transform_tape_to_simulator(x, y):
-    return x - 20.24, y - 17.66
+def transform_tape_to_simulator(x, y, offsetX, offsetY):
+    return x - offsetX, y - offsetY
 
 
-def transform_simulator_to_tape(x, y):
-    return x + 20.24, y + 17.66
+def transform_simulator_to_tape(x, y, offsetX, offsetY):
+    return x + offsetX, y + offsetY
 
 
 if __name__ == '__main__':
-    print(transform_to_taped_coordinates(205, 70, 0.2))
-    print(transform_to_image_coordinates(21, -4, 0.2))
+    # print(transform_to_taped_coordinates(205, 70, 0.2))
+    # print(transform_to_image_coordinates(21, -4, 0.2))
+    print(transform_to_taped_coordinates(121, 26, 0.2))
+    print(transform_tape_to_simulator(4.2, 4.8))

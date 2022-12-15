@@ -47,14 +47,14 @@ def heading_to_yaw(heading_curr):
     return yaw_curr
 
 
-def transform_points_from_image_to_simulator(points, resolution):
+def transform_points_from_image_to_simulator(points, resolution, offsetX, offsetY):
     path = []
     for pathInd in range(len(points)):
         nextChasePointXTape, nextChasePointYTape = transform_to_taped_coordinates(points[pathInd][1],
                                                                                   points[pathInd][0],
                                                                                   resolution)
         nextChasePointXSimulator, nextChasePointYSimulator = transform_tape_to_simulator(
-            nextChasePointXTape, nextChasePointYTape)
+            nextChasePointXTape, nextChasePointYTape, offsetX, offsetY)
         path.append([nextChasePointXSimulator, nextChasePointYSimulator])
     path = np.array(path)
     return path
@@ -66,7 +66,7 @@ class Summon(object):
 
         self.rate = rospy.Rate(0.5)
 
-        self.look_ahead = 6  # meters
+        self.look_ahead = 2  # meters
         self.wheelbase = 1.75  # meters
         self.goal = 0
 
@@ -164,6 +164,11 @@ class Summon(object):
             curr_x_simulator, curr_y_simulator, curr_yaw_simulator = self.get_gem_pose()
             # get the current position in taped origin coordinate frame
             curr_x_tape, curr_y_tape = axy.ll2xy(self.curr_lat, self.curr_lon, self.olat, self.olon)
+
+            # offsets change across worlds
+            offsetX = curr_x_tape - curr_x_simulator
+            offsetY = curr_y_tape - curr_y_simulator 
+
             currLocationImageCoordinates = transform_to_image_coordinates(curr_x_tape, curr_y_tape, resolution)
 
             while self.obstacleMap is None:
@@ -175,12 +180,13 @@ class Summon(object):
             # print(f"after Init = {afterInit - beforeVoronoi}")
             try:
                 path = voronoi.path(currLocationImageCoordinates[::-1], self.destinationImageCoordinates[::-1])
-                bezierPathImageCoordinates = bezier_curve(np.array(path), nTimes=1000)
+                bezierPathImageCoordinates = bezier_curve(np.array(path), 1000, voronoi, resolution)
                 self.plot_path(bezierPathImageCoordinates, voronoi.plot_regions())
                 bezierPathSimulatorCoordinates = transform_points_from_image_to_simulator(bezierPathImageCoordinates,
-                                                                                          resolution)
+                                                                                          resolution, offsetX, offsetY)
             except Exception as e:
                 print(f"ERROR: {str(e)}")
+                # raise e
                 continue
             # afterPath = time.time()
             # print(f"after Path = {afterPath - afterInit}")
@@ -194,6 +200,7 @@ class Summon(object):
 
             """ Find nearest goal point in each iteration """
             goal = 0
+            print(f"length of dist_arr: {len(dist_arr)} | dist[goal]: {dist_arr[goal]} | self.look_ahead: {self.look_ahead} | look ahead check: {dist_arr[goal] < self.look_ahead - 0.3}")
             while goal < len(dist_arr) and dist_arr[goal] < self.look_ahead - 0.3:
                 goal += 1
 
@@ -220,13 +227,16 @@ class Summon(object):
 
             print(f"Curr Yaw Value: {curr_yaw_simulator * 180.0 / np.pi},\n"
                   f"Orientation of Path: {orientationOfLineConnectingNextChasePoint * 180 / np.pi}\n"
+                  f"Curr Location in Image World - {currLocationImageCoordinates[0], currLocationImageCoordinates[1]}\n"
                   f"Curr Location in Simulator World - {curr_x_simulator, curr_y_simulator}\n"
+                  f"Next Chase Location in Image World - {bezierPathImageCoordinates[goal][0], bezierPathImageCoordinates[goal][1]}\n"
                   f"Next Chase Location in Simulator World - {nextChasePointXSimulator, nextChasePointYSimulator}\n")
 
             # find the curvature and the angle
             alpha = orientationOfLineConnectingNextChasePoint - curr_yaw_simulator
             k = 0.285
-            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / np.sqrt(distance_from_next_chase_point))
+            angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / distance_from_next_chase_point)
+            # angle_i = math.atan((2 * k * self.wheelbase * math.sin(alpha)) / np.sqrt(distance_from_next_chase_point))
             angle = angle_i * 2
             angle = round(np.clip(angle, -0.61, 0.61), 3)
 
@@ -246,10 +256,13 @@ class Summon(object):
                 print("Destination Reached!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 break
 
-            if distance_from_next_chase_point < 5.0:
-                self.ackermann_msg.speed = 2.8
-            else:
-                self.ackermann_msg.speed = 2.8
+            # angularThreshold = np.pi/6
+            # if np.abs(alpha) > angularThreshold:
+            #     self.ackermann_msg.speed = 1.0
+            # elif distance_from_next_chase_point < 5.0:
+            #     self.ackermann_msg.speed = 2.8
+            # else:
+            self.ackermann_msg.speed = 2.8
 
             self.ackermann_msg.steering_angle = angle
             self.ackermann_pub.publish(self.ackermann_msg)
