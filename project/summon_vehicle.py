@@ -97,6 +97,12 @@ class PID(object):
 
         return fwd + self.kp * e + self.ki * self.iterm + self.kd * de
 
+    def set_control(self):
+        """
+        runs a while loop and gives the control outputs to the vehicle
+        """
+        pass
+
 
 class OnlineFilter(object):
 
@@ -121,15 +127,15 @@ class PurePursuit(object):
 
         self.rate = rospy.Rate(10)
 
-        self.look_ahead = 4
-        self.far_look_ahead = 8  # meters
+        self.look_ahead = 6
+        self.far_look_ahead = 10  # meters
         self.wheelbase = 1.75  # meters
         self.offset = 0.46  # meters
 
         self.gnss_sub = rospy.Subscriber("/novatel/inspva", Inspva, self.inspva_callback)
 
-        self.lat = 0.0
-        self.lon = 0.0
+        self.lat = None
+        self.lon = None
         self.heading = 0.0
 
         self.enable_sub = rospy.Subscriber("/pacmod/as_tx/enable", Bool, self.enable_callback)
@@ -139,6 +145,8 @@ class PurePursuit(object):
 
         self.olat = 40.0928563
         self.olon = -88.2359994
+        self.voronoiCount = 0
+        self.voronoiRate = 400
 
         self.desired_speed = 0.75  # m/s, reference speed
         self.max_accel = 0.4  # % of acceleration
@@ -200,7 +208,7 @@ class PurePursuit(object):
                                                                           resolution)
 
     def plot_path(self, path, obstacleMapRGB):
-        """
+        """Rate
         plots path on RVIZ
         """
         if self.obstacleMap is None or len(path) < 2:
@@ -229,8 +237,10 @@ class PurePursuit(object):
         """
         update obstacle map on every event
         """
-        self.obstacleMap = self.cvBridge.imgmsg_to_cv2(data, 'mono8').astype(np.uint8) // 255
-        # print(self.obstacleMap)
+        # self.obstacleMap = self.cvBridge.imgmsg_to_cv2(data, 'mono8').astype(np.uint8) // 255
+        self.obstacleMap = np.zeros((151, 401), dtype=np.uint8)
+        self.obstacleMap[0, :] = 1
+        # print(self.obstacleMap.shape)
 
     def speed_callback(self, msg):
         self.speed = round(msg.data, 3)  # forward velocity in m/s
@@ -283,6 +293,7 @@ class PurePursuit(object):
         # vehicle x, y position in fixed local frame, in meters
         # reference point is located at the center of GNSS antennas
         local_x_curr, local_y_curr = self.wps_to_local_xy(self.lon, self.lat)
+        # print(f"lat: {self.lat} | lon: {self.lon} | local_x_curr: {local_x_curr} | local_y_curr: {local_y_curr}")
 
         # heading to yaw (degrees to radians)
         # heading is calculated from two GNSS antennas
@@ -342,41 +353,50 @@ class PurePursuit(object):
                     print("Gas Engaged!")
 
                     self.gem_enable = True
+            
+            while self.lat is None or self.lon is None:
+                self.rate.sleep()
 
             curr_x, curr_y, curr_yaw = self.get_gem_state()
+            # print(f"curr_x: {curr_x}, curr_y: {curr_y}")
 
             currLocationImageCoordinates = transform_to_image_coordinates(curr_x, curr_y, resolution)
 
             while self.obstacleMap is None:
                 self.rate.sleep()
 
-            # beforeVoronoi = time.time()
-            # print(f"before Voronoi = {beforeVoronoi - startTime}")
-            print(f"Obstacle Map Shape - {self.obstacleMap.shape}")
-            voronoi = Voronoi(self.obstacleMap)
-            # afterInit = time.time()
-            # print(f"after Init = {afterInit - beforeVoronoi}")
-            try:
-                path = voronoi.path(currLocationImageCoordinates[::-1], self.destinationImageCoordinates[::-1])
-                bezierPathImageCoordinates = bezier_curve(np.array(path), 1000, voronoi, resolution)
-                self.plot_path(bezierPathImageCoordinates, voronoi.plot_regions())
-                bezierPathTapeCoordinates = transform_points_from_image_to_tape(bezierPathImageCoordinates,
-                                                                                resolution)
-            except Exception as e:
-                print(f"src = {currLocationImageCoordinates} destination = {self.destinationImageCoordinates}")
-                print(str(e))
-                continue
-            # afterPath = time.time()
-            # print(f"after Path = {afterPath - afterInit}")
-            print(f"path: {path}")
-            # voronoi.visualise_path(path)
+            if self.voronoiCount == 0:
+
+                # beforeVoronoi = time.time()
+                # print(f"before Voronoi = {beforeVoronoi - startTime}")
+                print(f"Obstacle Map Shape: {self.obstacleMap.shape}")
+                voronoi = Voronoi(self.obstacleMap)
+                # afterInit = time.time()
+                # print(f"after Init = {afterInit - beforeVoronoi}")
+                try:
+                    path = voronoi.path(currLocationImageCoordinates[::-1], self.destinationImageCoordinates[::-1])
+                    bezierPathImageCoordinates = bezier_curve(np.array(path), 1000, voronoi, resolution)
+                    bezierPathImageCoordinates = bezierPathImageCoordinates[::-1]
+                    self.plot_path(bezierPathImageCoordinates, voronoi.plot_regions())
+                    bezierPathTapeCoordinates = transform_points_from_image_to_tape(bezierPathImageCoordinates,
+                                                                                    resolution)
+                except Exception as e:
+                    print(f"src = {currLocationImageCoordinates} destination = {self.destinationImageCoordinates}")
+                    print(str(e))
+                    continue
+                # afterPath = time.time()
+                # print(f"after Path = {afterPath - afterInit}")
+                # voronoi.visualise_path(path)
+
+            self.voronoiCount = (self.voronoiCount + 1) % self.voronoiRate
 
             dist_arr = []
 
             # finding the distance of each way point from the current position
             for i in range(len(bezierPathTapeCoordinates)):
-                dist_arr.append(self.dist((bezierPathTapeCoordinates[i][0], bezierPathTapeCoordinates[i][1]),
-                                          (curr_x, curr_y)))
+                p_dist = self.dist((bezierPathTapeCoordinates[i][0], bezierPathTapeCoordinates[i][1]),
+                                          (curr_x, curr_y))
+                dist_arr.append(p_dist)
 
             """ Find nearest goal point in each iteration """
             goal = 0
@@ -387,13 +407,11 @@ class PurePursuit(object):
             while far_ahead_point < len(dist_arr) and dist_arr[far_ahead_point] < self.far_look_ahead - 0.3:
                 far_ahead_point += 1
 
-            # finding the distance between the goal point and the vehicle
-            # true look-ahead distance between a waypoint and current position
             goal = min(goal, len(dist_arr) - 1)
             far_ahead_point = min(far_ahead_point, len(dist_arr) - 1)
             distance_from_next_chase_point = dist_arr[goal]
 
-            print(f"goal: {self.goal}, distance_from_next_chase_point:{distance_from_next_chase_point}")
+            print(f"goal: {goal}, distance_from_next_chase_point:{distance_from_next_chase_point}")
 
             distance_from_destination = self.dist(self.destinationTapeCoordinates, (curr_x, curr_y))
 
@@ -409,6 +427,12 @@ class PurePursuit(object):
 
             orientationOfLineConnectingNextChasePoint = orientation_ray_from_vehicle(goal)
             orientationOfLineConnectingFarLookAheadPoint = orientation_ray_from_vehicle(far_ahead_point)
+
+            print(f"Curr Yaw Value: {curr_yaw * 180.0 / np.pi},\n"
+                  f"Orientation of Path: {orientationOfLineConnectingNextChasePoint * 180 / np.pi}\n"
+                  f"Curr Location in Image World - {currLocationImageCoordinates[0], currLocationImageCoordinates[1]}\n"
+                  f"Curr Location in Simulator World - {curr_x, curr_y}\n"
+                  f"Next Chase Location in Image World - {bezierPathImageCoordinates[goal][0], bezierPathImageCoordinates[goal][1]}\n")
 
             """
             # finding the distance of each way point from the current position
@@ -451,7 +475,7 @@ class PurePursuit(object):
             steering_angle = self.front2steer(f_delta_deg)
 
             if (self.gem_enable == True):
-                print("Current index: " + str(self.goal))
+                print("Current index: " + str(goal))
                 print("Forward velocity: " + str(self.speed))
                 ct_error = round(np.sin(alpha) * distance_from_next_chase_point, 3)
                 print("Crosstrack Error: " + str(ct_error))
@@ -461,7 +485,7 @@ class PurePursuit(object):
 
             # implement constant pure pursuit controller
             if distance_from_destination < 4.0:
-                self.brake_cmd.f64_cmd = 1.0
+                self.brake_cmd.f64_cmd = 0.5
                 self.brake_pub.publish(self.brake_cmd)
                 print("Destination Reached!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 break
@@ -476,13 +500,27 @@ class PurePursuit(object):
 
             current_time = rospy.get_time()
             filt_vel = self.speed_filter.get_data(self.speed)
-            output_accel = self.pid_speed.get_control(current_time, desired_speed - filt_vel)
+            print(f"filtered speed: {filt_vel}")
+            # output_accel = self.pid_speed.get_control(current_time, desired_speed - filt_vel)
+            output_accel = self.pid_speed.get_control(current_time, desired_speed - self.speed)
+            print("Output Acceleration - ", output_accel)
 
             if output_accel > self.max_accel:
                 output_accel = self.max_accel
 
-            if output_accel < 0.3:
-                output_accel = 0.3
+            if output_accel < 0.35:
+                output_accel = 0.35
+            
+            # if filt_vel > self.desired_speed:
+            if self.speed > self.desired_speed:
+                # print(f"output accel: {output_accel}")
+                # print(f"self.speed: {self.speed}")
+                output_accel = 0.0
+                # self.brake_cmd.f64_cmd = 0.0 #0.3
+                # self.brake_pub.publish(self.brake_cmd)
+            # else:
+                # self.brake_cmd.f64_cmd = 0.0
+                # self.brake_pub.publish(self.brake_cmd)
 
             if f_delta_deg <= 30 and f_delta_deg >= -30:
                 self.turn_cmd.ui16_cmd = 1
@@ -493,7 +531,9 @@ class PurePursuit(object):
 
             self.accel_cmd.f64_cmd = output_accel
             self.steer_cmd.angular_position = np.radians(steering_angle)
+            # print(self.accel_cmd)
             self.accel_pub.publish(self.accel_cmd)
+            print("Accel Done")
             self.steer_pub.publish(self.steer_cmd)
             self.turn_pub.publish(self.turn_cmd)
 

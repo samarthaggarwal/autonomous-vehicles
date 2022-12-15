@@ -43,7 +43,7 @@ class Node():
 			for signal in sos:
 				self.turn_cmd.ui16_cmd = signal
 				self.turn_pub.publish(self.turn_cmd)
-				self.rate.sleep
+				self.rate.sleep()
 
 if __name__ == '__main__':
 	rospy.init_node('sos_node', anonymous=True)

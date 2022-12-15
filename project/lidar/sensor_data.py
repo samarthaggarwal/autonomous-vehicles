@@ -9,7 +9,7 @@ import rospy
 from sensor_msgs.msg import NavSatFix, Imu
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 from std_msgs.msg import String, Bool, Float32, Float64
-# from novatel_gps_msgs.msg import NovatelPosition, NovatelXYZ, Inspva
+from novatel_gps_msgs.msg import NovatelPosition, NovatelXYZ, Inspva
 
 import alvinxy.alvinxy as axy
 
