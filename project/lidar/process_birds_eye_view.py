@@ -5,6 +5,7 @@ import cv2
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 
+
 class ProcessBirdsEyeView:
     def __init__(self, resolution):
         self.resolution = resolution
@@ -44,6 +45,8 @@ class ProcessBirdsEyeView:
         else:
             self.aggregated_img = self.aggregated_img + processedImg
             self.aggregated_img = np.where(self.aggregated_img > 0, 255, 0).astype(np.uint8)
+
+        np.save("voronoiObstacleMap.npy", self.aggregated_img)
 
         self.obstacleMapPub.publish(self.cvBridge.cv2_to_imgmsg(self.aggregated_img, 'mono8'))
 

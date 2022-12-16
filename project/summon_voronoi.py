@@ -65,10 +65,10 @@ class BeizerPath(object):
         self.olat = 40.0928563
         self.olon = -88.2359994
 
-        self.obstacleMap = None
-        self.obstacleMapSub = rospy.Subscriber("/mp0/ObstacleMap", Image, self.updateObstacleMap, queue_size=1)
-        self.voronoiMapPub = rospy.Publisher("/mp0/VoronoiPath", Image, queue_size=1)
-        self.bezierPathPub = rospy.Publisher("/mp0/BeizerPath", Image, queue_size=1)
+        self.obstacleMap = np.load("/home/gem/demo_ws/src/vehicle_drivers/summon/scripts/lidar/voronoiObstacleMap.npy").astype(np.uint8) // 255
+        # self.obstacleMapSub = rospy.Subscriber("/mp0/ObstacleMap", Image, self.updateObstacleMap, queue_size=1)
+        self.voronoiMapPub = rospy.Publisher("/mp0/VoronoiPath", Image, queue_size=10)
+        self.bezierPathPub = rospy.Publisher("/mp0/BeizerPath", Image, queue_size=10)
 
         self.cvBridge = CvBridge()
 
@@ -109,9 +109,6 @@ class BeizerPath(object):
         update obstacle map on every event
         """
         self.obstacleMap = self.cvBridge.imgmsg_to_cv2(data, 'mono8').astype(np.uint8) // 255
-        # self.obstacleMap = np.zeros((151, 401), dtype=np.uint8)
-        # self.obstacleMap[0, :] = 1
-        # print(self.obstacleMap.shape)
 
     def heading_to_yaw(self, heading_curr):
         # 0   <= heading < 90  --- 90 to 0     (pi/2 to 0)
@@ -157,6 +154,8 @@ class BeizerPath(object):
 
     def start_beizer(self):
 
+        count = 0
+
         while not rospy.is_shutdown():
 
             while self.lat is None or self.lon is None:
@@ -170,11 +169,15 @@ class BeizerPath(object):
             while self.obstacleMap is None:
                 self.rate.sleep()
 
-            print(f"Obstacle Map Shape: {self.obstacleMap.shape}")
+            count += 1
+            print(f"Obstacle Map Shape: {self.obstacleMap.shape} | count: {count}")
             voronoi = Voronoi(self.obstacleMap)
             try:
+                print("start voronoic")
                 path = voronoi.path(currLocationImageCoordinates[::-1], self.destinationImageCoordinates[::-1])
+                print("2")
                 bezierPathImageCoordinates = bezier_curve(np.array(path), 1000, voronoi, resolution)
+                print("3")
                 bezierPathImageCoordinates = bezierPathImageCoordinates[::-1]
                 self.plot_path(bezierPathImageCoordinates, voronoi.plot_regions())
             except Exception as e:
@@ -184,6 +187,8 @@ class BeizerPath(object):
 
             bezierPathImageCoordinates = np.array(bezierPathImageCoordinates).astype(np.uint8)
             self.bezierPathPub.publish(self.cvBridge.cv2_to_imgmsg(bezierPathImageCoordinates, 'mono8'))
+            print("end voronoic")
+
             # self.rate.sleep()
 
 

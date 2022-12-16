@@ -124,10 +124,10 @@ class PurePursuit(object):
 
     def __init__(self):
 
-        self.rate = rospy.Rate(10)
+        self.rate = rospy.Rate(50)
 
-        self.look_ahead = 6
-        self.far_look_ahead = 10  # meters
+        self.look_ahead = 5
+        self.far_look_ahead = 8  # meters
         self.wheelbase = 1.75  # meters
         self.offset = 0.46  # meters
 
@@ -149,8 +149,8 @@ class PurePursuit(object):
         self.olat = 40.0928563
         self.olon = -88.2359994
 
-        self.desired_speed = 0.75  # m/s, reference speed
-        self.max_accel = 0.4  # % of acceleration
+        self.desired_speed = 0.4  # m/s, reference speed
+        # self.max_accel = 0.4  # % of acceleration
         self.pid_speed = PID(1.2, 0.2, 0.6, wg=20)
         self.speed_filter = OnlineFilter(1.2, 30, 4)
 
@@ -369,35 +369,6 @@ class PurePursuit(object):
             orientationOfLineConnectingNextChasePoint = orientation_ray_from_vehicle(goal)
             orientationOfLineConnectingFarLookAheadPoint = orientation_ray_from_vehicle(far_ahead_point)
 
-            # print(f"Curr Yaw Value: {curr_yaw * 180.0 / np.pi},\n"
-            #       f"Orientation of Path: {orientationOfLineConnectingNextChasePoint * 180 / np.pi}\n"
-            #       f"Curr Location in Image World - {currLocationImageCoordinates[0], currLocationImageCoordinates[1]}\n"
-            #       f"Curr Location in Simulator World - {curr_x, curr_y}\n"
-            #       f"Next Chase Location in Image World - {self.bezierPathImageCoordinates[goal][0], self.bezierPathImageCoordinates[goal][1]}\n")
-
-            """
-            # finding the distance of each way point from the current position
-            for i in range(len(self.path_points_x)):
-                self.dist_arr[i] = self.dist((self.path_points_x[i], self.path_points_y[i]), (curr_x, curr_y))
-            
-            # finding those points which are less than the look ahead distance (will be behind and ahead of the vehicle)
-            goal_arr = np.where( (self.dist_arr < self.look_ahead + 0.3) & (self.dist_arr > self.look_ahead - 0.3) )[0]
-            
-            # finding the goal point which is the last in the set of points less than the lookahead distance
-            for idx in goal_arr:
-                v1 = [self.path_points_x[idx]-curr_x , self.path_points_y[idx]-curr_y]
-                v2 = [np.cos(curr_yaw), np.sin(curr_yaw)]
-                temp_angle = self.find_angle(v1,v2)
-                # find correct look-ahead point by using heading information
-                if abs(temp_angle) < np.pi/2:
-                    self.goal = idx
-                    break
-            
-            # finding the distance between the goal point and the vehicle
-            # true look-ahead distance between a waypoint and current position
-            L = self.dist_arr[self.goal]
-            """
-
             # find the curvature and the angle
             alpha = orientationOfLineConnectingNextChasePoint - curr_yaw
             alpha_far = orientationOfLineConnectingFarLookAheadPoint - curr_yaw
@@ -434,8 +405,6 @@ class PurePursuit(object):
             angularThreshold = np.pi / 18
             if np.abs(alpha) > angularThreshold or np.abs(alpha_far) > angularThreshold:
                 desired_speed = self.desired_speed / 2
-            # elif distance_from_next_chase_point < 5.0:
-            #     desired_speed = 2.8
             else:
                 desired_speed = self.desired_speed
 
@@ -445,23 +414,24 @@ class PurePursuit(object):
             # output_accel = self.pid_speed.get_control(current_time, desired_speed - filt_vel)
             output_accel = self.pid_speed.get_control(current_time, desired_speed - self.speed)
             print("Output Acceleration - ", output_accel)
+            print(f"speed: {self.speed}")
 
-            if output_accel > self.max_accel:
-                output_accel = self.max_accel
+            min_speed = 0.1
+            max_speed = 1.0
+            stopped_speed = 0.05
+            speed_tolerance = 0.2
+            max_accel = 0.4
+            accel_for_const_speed = 0.315
 
-            if output_accel < 0.35:
-                output_accel = 0.35
+            if filt_vel < stopped_speed:
+                min_accel = 0.35
+            else:
+                min_accel = 0.1 # to be decided
 
-            # if filt_vel > self.desired_speed:
-            if self.speed > self.desired_speed:
-                # print(f"output accel: {output_accel}")
-                # print(f"self.speed: {self.speed}")
-                output_accel = 0.0
-                # self.brake_cmd.f64_cmd = 0.0 #0.3
-                # self.brake_pub.publish(self.brake_cmd)
-            # else:
-            # self.brake_cmd.f64_cmd = 0.0
-            # self.brake_pub.publish(self.brake_cmd)
+            if filt_vel > desired_speed: 
+                output_accel = accel_for_const_speed
+
+            output_accel = min(max(output_accel, min_accel), max_accel)
 
             if f_delta_deg <= 30 and f_delta_deg >= -30:
                 self.turn_cmd.ui16_cmd = 1
@@ -470,11 +440,11 @@ class PurePursuit(object):
             else:
                 self.turn_cmd.ui16_cmd = 0  # turn right
 
-            if output_accel > 0:
-                self.accel_cmd.f64_cmd = output_accel
-                # print(self.accel_cmd)
-                self.accel_pub.publish(self.accel_cmd)
-            print("Accel Done")
+            # if output_accel > 0:
+            self.accel_cmd.f64_cmd = output_accel
+            # print(self.accel_cmd)
+            self.accel_pub.publish(self.accel_cmd)
+            # print("Accel Done")
             self.steer_cmd.angular_position = np.radians(steering_angle)
             self.steer_pub.publish(self.steer_cmd)
             self.turn_pub.publish(self.turn_cmd)

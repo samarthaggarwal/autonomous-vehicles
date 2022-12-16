@@ -1,1 +1,1 @@
-destinationTapeCoordinates = (50.0, -10.0)
+destinationTapeCoordinates = (45.0, -10.0)

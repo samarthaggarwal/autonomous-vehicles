@@ -17,11 +17,11 @@ def bezier_curve(points, nTimes, voronoi, resolution, distance_from_obstacle=2.0
 
         See http://processingjs.nihongoresources.com/bezierinfo/
     """
-    ans = get_bezier(points, nTimes)
+    ans = None
     distance = int(distance_from_obstacle / resolution)
-    count = 2
+    count = 5
     # print(f"original points: {points}")
-    while not voronoi.are_waypoints_clear(ans, distance):
+    while ans is None or not voronoi.are_waypoints_clear(ans, distance):
         npoints = []
         for p in points:
             for c in range(count):
@@ -29,7 +29,7 @@ def bezier_curve(points, nTimes, voronoi, resolution, distance_from_obstacle=2.0
         if len(npoints) > 900:  # bezier can't fit curve on >1000 points
             break
         ans = get_bezier(np.array(npoints), nTimes)
-        count += 1
+        count *= 2
     # print("final count: {count}")
     return ans
 
