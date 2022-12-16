@@ -11,7 +11,7 @@ In this challenge, we run the vehicle as per the waypoints (GPS coordinates) giv
 
 ## Demo
 
-[![Vehicle follows a pattern of '8' using GPS Scribbling](https://img.youtube.com/vi/RT3cBKURbZI/0.jpg)](https://www.youtube.com/watch?v=RT3cBKURbZI)
+[![Vehicle follows a pattern of '8' using GPS Scribbling](https://img.youtube.com/vi/6lJewkgkqH8/0.jpg)](https://youtu.be/6lJewkgkqH8)
 
 
 ## Run

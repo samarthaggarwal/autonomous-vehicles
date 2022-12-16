@@ -3,7 +3,7 @@
 In this challenge, we flash the distress signal on the vehicle using the turn indicator lights.
 
 ## Demo
-[![Vehicle flashes Distress Signal via turn indicator lights](https://img.youtube.com/vi/goFwmhLmExY/0.jpg)](https://www.youtube.com/watch?v=goFwmhLmExY)
+[![Vehicle flashes Distress Signal via turn indicator lights](https://img.youtube.com/vi/goFwmhLmExY/0.jpg)](https://youtu.be/mcdhqUhcZQ8)
 
 
 ## Run

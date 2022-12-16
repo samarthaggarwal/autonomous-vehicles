@@ -38,3 +38,18 @@ voronoi.visualise_path(path)
 img = cv2.imread('path.png')
 plt.imshow(img)
 ```
+
+## Demo
+
+### Smart Summon - Building the obstacle map with Lidar
+
+[![Smart Summon - Building the obstacle map with Lidar](https://img.youtube.com/vi/RybiM3pVGuM/0.jpg)](https://youtu.be/RybiM3pVGuM)
+
+### Smart Summon with Obstacle Detection (Lidar) and Dynamic Path Planning (Voronoi) - Inside View
+
+[![Smart Summon with Obstacle Detection (Lidar) and Dynamic Path Planning (Voronoi) - Inside View](https://img.youtube.com/vi/vb3W54FPeVw/0.jpg)](https://youtu.be/vb3W54FPeVw)
+
+
+### Smart Summon with Obstacle Detection (Lidar) and Dynamic Path Planning (Voronoi) - Outside View
+
+[![Smart Summon with Obstacle Detection (Lidar) and Dynamic Path Planning (Voronoi) - Outside View](https://img.youtube.com/vi/TV2HIjJie4Y/0.jpg)](https://youtu.be/TV2HIjJie4Y)

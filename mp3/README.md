@@ -1,6 +1,7 @@
 # RGB-D SLAM with RTABMAP
 
-https://youtu.be/3A4Ysf9erTo
+## Demo
+[![SLAM using rtabmapros](https://img.youtube.com/vi/bvR8X_Q_xow/0.jpg)](https://youtu.be/bvR8X_Q_xow)
 
 ## How to run SLAM using Rosbag:
 0. Set up
