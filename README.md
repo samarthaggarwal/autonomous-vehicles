@@ -27,3 +27,6 @@ Our sincere thanks to our instructor, Prof. David Forsyth, and the entire team.
 * Tony Joo
 * Akul Joshi
 * Samarth Aggarwal
+
+## [Car Says Bye](https://youtu.be/cTlMY3pIvXk)
+[![Bye CS588](assets/studpeople.jpg)](https://youtu.be/cTlMY3pIvXk)
