@@ -23,7 +23,7 @@ Run the following commands in separate terminals. Run `source devel/setup.bash` 
 - `roslaunch basic_launch gem_dbw_joystick.launch`
 - cd `./project/lidar` and run `python3 detect_obstacles.py`
 - `rosrun summon summon_voronoi.py`
-- `rosrun summon summon_vehicle.py`
+- `rosrun summon summon_control.py`
 
 ### Voronoi Test
 Generate a random grid of obstacles and see its voronoi diagram.

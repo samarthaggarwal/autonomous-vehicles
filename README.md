@@ -18,7 +18,7 @@ The details of individual machine problems and our project can be found in their
 
 All the experiments were done on the vehicle platform by [AutonomousStuff](https://autonomoustuff.com/).
 
-<img src="vehicle.jpeg" alt="car-image" width="300"/>
+<img src="./assets/vehicle.jpeg" alt="car-image" width="300"/>
 
 ## Team Members
 
