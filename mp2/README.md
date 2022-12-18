@@ -8,9 +8,7 @@ We use the YOLO-V5 model to detect obstacles from the camera feed of the vehicle
 
 ## Demo
 
-[![Demo 1 - Vehicle brakes upon detecting a pedestrian](https://img.youtube.com/vi/AnTwoKCJmUU/0.jpg)](https://www.youtube.com/watch?v=AnTwoKCJmUU)
-
-[![Demo 2 - Vehicle brakes upon detecting a pedestrian](https://img.youtube.com/vi/AsS8P6OSIcg/0.jpg)](https://www.youtube.com/watch?v=AsS8P6OSIcg)
+[![Demo 1 - Vehicle brakes upon detecting a pedestrian](https://img.youtube.com/vi/snACKNnxwtc/0.jpg)](https://youtu.be/snACKNnxwtc)
 
 
 ## Run
@@ -31,5 +29,5 @@ $ roslaunch basic_launch gem_dbw_joystick.launch
 In another terminal, run the following command to run the code on the vehicle.
 ```commandline
 $ source devel/setup.bash
-$ rosrun mp0 mp0.py
+$ rosrun mp2 mp2.py
 ```

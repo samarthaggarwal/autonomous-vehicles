@@ -11,7 +11,14 @@ In this challenge, we run the vehicle as per the waypoints (GPS coordinates) giv
 
 ## Demo
 
+### Simulator - Pattern 8
 [![Vehicle follows a pattern of '8' using GPS Scribbling](https://img.youtube.com/vi/6lJewkgkqH8/0.jpg)](https://youtu.be/6lJewkgkqH8)
+
+### GEM Vehicle - Pattern 8
+[![Vehicle follows a pattern of '8' using GPS Scribbling](https://img.youtube.com/vi/CAms-TQToC8/0.jpg)](https://youtu.be/CAms-TQToC8)
+
+### GEM Vehicle - Oval 8
+[![Vehicle follows an oval pattern using GPS Scribbling](https://img.youtube.com/vi/YF-3jUDkvT4/0.jpg)](https://youtu.be/YF-3jUDkvT4)
 
 
 ## Run
