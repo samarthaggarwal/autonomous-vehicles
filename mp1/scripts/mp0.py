@@ -22,7 +22,7 @@ class Node():
 
 	def __init__(self):
 
-		self.rate = rospy.Rate(10)
+		self.rate = rospy.Rate(1)
 		
 		self.turn_pub = rospy.Publisher('/pacmod/as_rx/turn_cmd', PacmodCmd, queue_size = 1)
 		self.turn_cmd = PacmodCmd()
